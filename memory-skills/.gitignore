@@ -1,0 +1,47 @@
+# Generated output
+results/
+tests/validation_results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Temporary / backup files
+*.bak
+*.tmp
+*.zip
+*.log
+
+# Compiled test binaries
+tests/userspace/*.o
+tests/userspace/test_malloc_alloc
+tests/userspace/test_mmap_alloc
+tests/userspace/test_dmabuf_alloc
+tests/userspace/test_shmem_alloc
+tests/kernel/*.o
+tests/kernel/*.ko
+tests/kernel/*.mod
+tests/kernel/*.mod.c
+tests/kernel/Module.symvers
+tests/kernel/modules.order
+
+# Raw device dumps and generated reports
+baseline/
+CLIP/
+
+# Metadata review bundles
+memory-skills-metadata-review.txt
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

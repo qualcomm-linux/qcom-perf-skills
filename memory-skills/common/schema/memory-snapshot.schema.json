@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://qualcomm.com/memory-skills/schemas/memory-snapshot/1.0.0",
+  "title": "MemorySnapshot",
+  "description": "Normalized memory data contract produced by the data-collection skill and consumed by all downstream analysis skills.",
+  "type": "object",
+  "required": ["schema_version", "snapshot_id", "timestamp", "device", "dump_dir", "sources"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "snapshot_id":    { "type": "string", "description": "UUID v4 uniquely identifying this snapshot." },
+    "timestamp":      { "type": "string", "format": "date-time" },
+    "label":          { "type": "string", "description": "Human-readable label, e.g. baseline or after_test." },
+    "device": {
+      "type": "object",
+      "required": ["serial"],
+      "properties": {
+        "serial":          { "type": "string" },
+        "model":           { "type": "string" },
+        "kernel_version":  { "type": "string" },
+        "soc_id":          { "type": "string" },
+        "android_version": { "type": "string" }
+      }
+    },
+    "dump_dir": { "type": "string" },
+    "sources": {
+      "type": "object",
+      "properties": {
+        "meminfo":      { "$ref": "#/definitions/ParsedSource" },
+        "slabinfo":     { "$ref": "#/definitions/ParsedSource" },
+        "vmstat":       { "$ref": "#/definitions/ParsedSource" },
+        "buddyinfo":    { "$ref": "#/definitions/ParsedSource" },
+        "zoneinfo":     { "$ref": "#/definitions/ParsedSource" },
+        "pagetypeinfo": { "$ref": "#/definitions/ParsedSource" },
+        "debugfs": {
+          "type": "object",
+          "properties": {
+            "dmabuf": { "$ref": "#/definitions/ParsedSource" },
+            "cma":    { "$ref": "#/definitions/ParsedSource" },
+            "kgsl":   { "$ref": "#/definitions/ParsedSource" }
+          }
+        },
+        "process_stats":   { "$ref": "#/definitions/ParsedSource" },
+        "reserved_memory": { "$ref": "#/definitions/ParsedSource" },
+        "iomem":           { "$ref": "#/definitions/ParsedSource" }
+      }
+    },
+    "collection_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "error"],
+        "properties": {
+          "source": { "type": "string" },
+          "error":  { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "ParsedSource": {
+      "type": "object",
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "path":      { "type": "string" },
+        "parsed":    {}
+      }
+    }
+  }
+}

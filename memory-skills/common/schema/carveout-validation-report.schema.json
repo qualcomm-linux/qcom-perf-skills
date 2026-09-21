@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://qualcomm.com/memory-skills/schemas/carveout-validation-report/2.0.0",
+  "title": "CarveoutValidationReport",
+  "description": "NHLOS carveout layout report produced by the nhlos-carveout-validation skill. Parses carveout regions from device tree reserved-memory nodes.",
+  "type": "object",
+  "required": ["report_type", "results", "summary"],
+  "properties": {
+    "report_type":      { "type": "string", "const": "CarveoutValidationReport" },
+    "generated_at":     { "type": "string" },
+    "dump_dir":         { "type": "string" },
+    "carveout_source":  { "type": "string", "description": "Source format: reserved-memory/*.bin or DMA_reservations.txt" },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "base_addr", "actual_size_kb", "status"],
+        "properties": {
+          "name":             { "type": "string", "description": "Carveout name (e.g. mpss, cdsp, hyp, tz)" },
+          "base_addr":        { "type": "string", "description": "Base address as hex string" },
+          "base_addr_int":    { "type": "integer", "description": "Base address as integer" },
+          "actual_size_kb":   { "type": "number", "description": "Size in KB" },
+          "actual_size_mb":   { "type": "number", "description": "Size in MB" },
+          "status": {
+            "type": "string",
+            "enum": ["FOUND"],
+            "description": "Always FOUND — carveout was parsed from device tree"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["found", "total_actual_mb"],
+      "properties": {
+        "found":            { "type": "integer", "description": "Number of carveouts found" },
+        "total_actual_mb":  { "type": "number",  "description": "Total carveout size in MB" }
+      }
+    }
+  }
+}

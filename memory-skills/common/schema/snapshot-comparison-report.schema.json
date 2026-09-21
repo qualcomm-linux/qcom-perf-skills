@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://qualcomm.com/memory-skills/schemas/snapshot-comparison-report/1.0.0",
+  "title": "SnapshotComparisonReport",
+  "description": "Delta comparison report produced by the snapshot-comparison skill.",
+  "type": "object",
+  "required": ["schema_version", "current_snapshot_id", "reference_snapshot_id", "categories"],
+  "properties": {
+    "schema_version":        { "type": "string", "const": "1.0.0" },
+    "current_snapshot_id":   { "type": "string" },
+    "reference_snapshot_id": { "type": "string" },
+    "current_label":         { "type": "string" },
+    "reference_label":       { "type": "string" },
+    "delta_seconds":         { "type": "number" },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "reference_kb", "current_kb", "delta_kb", "delta_pct", "trend"],
+        "properties": {
+          "category":     { "type": "string" },
+          "reference_kb": { "type": "number" },
+          "current_kb":   { "type": "number" },
+          "delta_kb":     { "type": "number" },
+          "delta_pct":    { "type": "number" },
+          "trend":        { "type": "string", "enum": ["GROWING", "SHRINKING", "STABLE"] }
+        }
+      }
+    },
+    "top_growers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category":  { "type": "string" },
+          "delta_kb":  { "type": "number" },
+          "delta_pct": { "type": "number" }
+        }
+      }
+    },
+    "top_reducers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category":  { "type": "string" },
+          "delta_kb":  { "type": "number" },
+          "delta_pct": { "type": "number" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["CRITICAL", "WARNING", "INFO"] },
+          "message":  { "type": "string" }
+        }
+      }
+    }
+  }
+}

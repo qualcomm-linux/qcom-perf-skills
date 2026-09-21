@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-08-16T08:30:00+05:30",
+  "input_reports": ["kernel_diff_report.json", "userspace_diff_report.json"],
+  "anomalies": [
+    {
+      "id": "ANO-001",
+      "title": "Kernel slab memory leak",
+      "severity": "CRITICAL",
+      "confidence": 0.87,
+      "layer": "kernel",
+      "evidence": [
+        { "source": "kernel_diff", "finding": "Slab 'kmalloc-256' grew by 312.0 MB (+340.0%)" },
+        { "source": "comparison", "finding": "Slab total trend: GROWING (+48.2%)" },
+        { "source": "vmstat_diff", "finding": "kswapd scanned 145,230 pages — memory pressure" }
+      ],
+      "hypothesis": "A kernel subsystem is allocating 'kmalloc-256' objects without freeing them. Likely candidates: network socket buffers, crypto subsystem, or a loadable module.",
+      "recommended_actions": [
+        "Run `cat /proc/slabinfo | grep kmalloc-256` over time to confirm growth rate",
+        "Check `kmemleak` output if enabled (CONFIG_DEBUG_KMEMLEAK=y)",
+        "Inspect recently loaded modules for slab allocation patterns"
+      ]
+    },
+    {
+      "id": "ANO-002",
+      "title": "Active OOM condition",
+      "severity": "CRITICAL",
+      "confidence": 0.99,
+      "layer": "kernel",
+      "evidence": [
+        { "source": "vmstat_diff", "finding": "OOM killer fired 3 time(s) between snapshots" }
+      ],
+      "hypothesis": "The system ran out of memory and the OOM killer terminated processes. This indicates severe memory pressure.",
+      "recommended_actions": [
+        "Check `dmesg | grep -i oom` for killed process names",
+        "Investigate the largest memory consumers at the time of OOM",
+        "Consider increasing swap or reducing memory consumers"
+      ]
+    },
+    {
+      "id": "ANO-003",
+      "title": "Graphics/media memory leak (DMA-BUF + KGSL + process)",
+      "severity": "WARNING",
+      "confidence": 0.75,
+      "layer": "userspace",
+      "evidence": [
+        { "source": "userspace_diff", "finding": "DMA-BUF total grew by 128.0 MB" },
+        { "source": "userspace_diff", "finding": "KGSL GPU memory grew by 64.0 MB" },
+        { "source": "userspace_diff", "finding": "Process 'surfaceflinger' PSS also growing (48.0 MB)" }
+      ],
+      "hypothesis": "A graphics or media subsystem is accumulating GPU/display buffers. Common causes: surfaceflinger buffer leak, video decoder not releasing frames, camera HAL holding buffers.",
+      "recommended_actions": [
+        "Check `cat /sys/kernel/debug/dma_buf/bufinfo` for growing allocators",
+        "Monitor KGSL per-process: `cat /sys/class/kgsl/kgsl/proc/*/mem`",
+        "Check for unclosed EGL surfaces or unreleased MediaCodec buffers"
+      ]
+    },
+    {
+      "id": "ANO-004",
+      "title": "CMA exhaustion risk",
+      "severity": "WARNING",
+      "confidence": 0.72,
+      "layer": "kernel",
+      "evidence": [
+        { "source": "comparison", "finding": "CMA Used grew by 96.0 MB (+38.4%)" }
+      ],
+      "hypothesis": "CMA usage is growing, which may exhaust contiguous memory available for camera, video, and ADSP subsystems.",
+      "recommended_actions": [
+        "Check `cat /sys/kernel/debug/cma/*/used` for per-region usage",
+        "Identify which subsystem is consuming CMA (camera, video, ADSP)",
+        "Consider increasing CMA pool size if usage is legitimate"
+      ]
+    }
+  ],
+  "summary": {
+    "critical": 2,
+    "warning": 2,
+    "info": 0,
+    "layers_affected": ["kernel", "userspace"],
+    "overall_health": "CRITICAL",
+    "input_reports_count": 2,
+    "mode": "two-snapshot"
+  }
+}

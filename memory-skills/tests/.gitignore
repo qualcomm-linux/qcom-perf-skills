@@ -1,0 +1,19 @@
+# Compiled userspace test binaries
+test_malloc_alloc
+test_mmap_alloc
+test_dmabuf_alloc
+test_shmem_alloc
+
+# Kernel module build artifacts
+kernel/*.o
+kernel/*.ko
+kernel/*.mod
+kernel/*.mod.c
+kernel/*.mod.o
+kernel/.*.cmd
+kernel/Module.symvers
+kernel/modules.order
+kernel/.tmp_versions/
+
+# Validation run output (snapshots collected during test runs)
+validation_results/

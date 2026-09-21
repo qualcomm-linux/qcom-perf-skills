@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "current_snapshot_id": "a3f2c1d0-1234-5678-abcd-ef0123456789",
+  "reference_snapshot_id": "b4e3d2c1-9876-5432-dcba-fedcba987654",
+  "current_label": "after_test",
+  "reference_label": "baseline",
+  "categories": [
+    { "category": "MemTotal",    "reference_kb": 12288000, "current_kb": 12288000, "delta_kb": 0,       "delta_pct": 0.0,   "trend": "STABLE"   },
+    { "category": "MemFree",     "reference_kb": 3145728,  "current_kb": 1048576,  "delta_kb": -2097152,"delta_pct": -66.7, "trend": "SHRINKING"},
+    { "category": "Slab",        "reference_kb": 524288,   "current_kb": 843776,   "delta_kb": 319488,  "delta_pct": 60.9,  "trend": "GROWING"  },
+    { "category": "Vmalloc",     "reference_kb": 131072,   "current_kb": 163840,   "delta_kb": 32768,   "delta_pct": 25.0,  "trend": "GROWING"  },
+    { "category": "PageTables",  "reference_kb": 32768,    "current_kb": 36864,    "delta_kb": 4096,    "delta_pct": 12.5,  "trend": "GROWING"  },
+    { "category": "KernelStack", "reference_kb": 8192,     "current_kb": 8704,     "delta_kb": 512,     "delta_pct": 6.25,  "trend": "GROWING"  },
+    { "category": "AnonPages",   "reference_kb": 4194304,  "current_kb": 4456448,  "delta_kb": 262144,  "delta_pct": 6.25,  "trend": "GROWING"  },
+    { "category": "Shmem",       "reference_kb": 65536,    "current_kb": 69632,    "delta_kb": 4096,    "delta_pct": 6.25,  "trend": "GROWING"  },
+    { "category": "Cached",      "reference_kb": 1638400,  "current_kb": 1572864,  "delta_kb": -65536,  "delta_pct": -4.0,  "trend": "STABLE"   },
+    { "category": "Buffers",     "reference_kb": 204800,   "current_kb": 196608,   "delta_kb": -8192,   "delta_pct": -4.0,  "trend": "STABLE"   },
+    { "category": "SwapCached",  "reference_kb": 16384,    "current_kb": 32768,    "delta_kb": 16384,   "delta_pct": 100.0, "trend": "GROWING"  },
+    { "category": "DMA-BUF",     "reference_kb": 204800,   "current_kb": 335872,   "delta_kb": 131072,  "delta_pct": 64.0,  "trend": "GROWING"  },
+    { "category": "KGSL",        "reference_kb": 131072,   "current_kb": 196608,   "delta_kb": 65536,   "delta_pct": 50.0,  "trend": "GROWING"  },
+    { "category": "CMA Used",    "reference_kb": 262144,   "current_kb": 360448,   "delta_kb": 98304,   "delta_pct": 37.5,  "trend": "GROWING"  },
+    { "category": "NHLOS Total", "reference_kb": 4194304,  "current_kb": 4194304,  "delta_kb": 0,       "delta_pct": 0.0,   "trend": "STABLE"   }
+  ],
+  "top_growers": [
+    { "category": "Slab",    "delta_kb": 319488, "delta_pct": 60.9  },
+    { "category": "DMA-BUF", "delta_kb": 131072, "delta_pct": 64.0  },
+    { "category": "KGSL",    "delta_kb": 65536,  "delta_pct": 50.0  },
+    { "category": "CMA Used","delta_kb": 98304,  "delta_pct": 37.5  },
+    { "category": "AnonPages","delta_kb": 262144, "delta_pct": 6.25  }
+  ],
+  "top_reducers": [
+    { "category": "MemFree", "delta_kb": -2097152, "delta_pct": -66.7 }
+  ],
+  "findings": [
+    { "severity": "WARNING", "message": "Slab grew by 312.0 MB (+60.9%) since baseline" },
+    { "severity": "WARNING", "message": "DMA-BUF grew by 128.0 MB (+64.0%) since baseline" },
+    { "severity": "WARNING", "message": "KGSL grew by 64.0 MB (+50.0%) since baseline" },
+    { "severity": "WARNING", "message": "CMA Used grew by 96.0 MB (+37.5%) since baseline" }
+  ]
+}

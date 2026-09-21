@@ -1,0 +1,14 @@
+# ── Memory dump output ────────────────────────────────────────────────────────
+# Raw dump directories created by --output (default: mem_dump/)
+mem_dump/
+*_dump/
+
+
+# ── memory Reports
+memory_report.html
+memory_report.txt
+
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/

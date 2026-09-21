@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset='utf-8'><title>Memory Analysis Report — QCS6490 (Sample)</title>
+<style>
+body { font-family: monospace; margin: 20px; max-width: 1200px; }
+h1 { color: #333; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
+h2 { color: #555; margin-top: 30px; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+th, td { border: 1px solid #ccc; padding: 6px 10px; }
+th { background: #f0f0f0; font-weight: bold; }
+.growing { background: #ffe0e0; }
+.shrinking { background: #e0ffe0; }
+.pass { background: #e0ffe0; }
+.over, .under { background: #fff8e0; }
+.missing { background: #ffe0e0; }
+.critical { background: #ffe0e0; }
+.warning { background: #fff8e0; }
+.info { background: #e8f4fd; }
+.health-healthy { background: #e0ffe0; padding: 10px; border-radius: 6px; }
+.health-degraded { background: #fff8e0; padding: 10px; border-radius: 6px; }
+.health-critical { background: #ffe0e0; padding: 10px; border-radius: 6px; }
+.card { border: 1px solid #ccc; border-radius: 6px; padding: 12px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h1>Memory Analysis Report — QCS6490 (Sample)</h1>
+<p style='color:#888'>Generated: 2026-08-16 10:05:01</p>
+<h2>Root Cause Analysis</h2>
+<p style='color:#888;font-size:0.85em'>Source: sample-reports/sample_rca_report.json</p>
+
+<div class='health-critical'>
+  <b>Overall Health: CRITICAL</b> &nbsp;|&nbsp;
+  Critical: 2 &nbsp; Warning: 3 &nbsp; Info: 0<br>
+  Layers: kernel, nhlos, userspace &nbsp;|&nbsp;
+  Mode: two-snapshot
+</div>
+
+<div class='card critical'>
+  <h3>[CRITICAL] ANO-001: Kernel slab memory leak</h3>
+  <p><b>Confidence:</b> 87% &nbsp; <b>Layer:</b> kernel</p>
+  <p><b>Evidence:</b></p><ul><li><b>[kernel_diff]</b> Slab 'kmalloc-256' grew by 312.0 MB (+340.0%)</li><li><b>[comparison]</b> Slab total trend: GROWING (+48.2%)</li><li><b>[vmstat_diff]</b> kswapd scanned 145,230 pages â€” memory pressure</li></ul>
+  <p><b>Hypothesis:</b> A kernel subsystem is allocating 'kmalloc-256' objects without freeing them. Likely candidates: network socket buffers, crypto subsystem, or a loadable module.</p>
+  <p><b>Recommended actions:</b></p><ol><li>Run `cat /proc/slabinfo | grep kmalloc-256` over time to confirm growth rate</li><li>Check `kmemleak` output if enabled (CONFIG_DEBUG_KMEMLEAK=y)</li><li>Inspect recently loaded modules for slab allocation patterns</li></ol>
+</div>
+<div class='card critical'>
+  <h3>[CRITICAL] ANO-002: Active OOM condition</h3>
+  <p><b>Confidence:</b> 99% &nbsp; <b>Layer:</b> kernel</p>
+  <p><b>Evidence:</b></p><ul><li><b>[vmstat_diff]</b> OOM killer fired 3 time(s) between snapshots</li></ul>
+  <p><b>Hypothesis:</b> The system ran out of memory and the OOM killer terminated processes. This indicates severe memory pressure.</p>
+  <p><b>Recommended actions:</b></p><ol><li>Check `dmesg | grep -i oom` for killed process names</li><li>Investigate the largest memory consumers at the time of OOM</li><li>Consider increasing swap or reducing memory consumers</li></ol>
+</div>
+<div class='card warning'>
+  <h3>[WARNING] ANO-004: Graphics/media memory leak (DMA-BUF + KGSL + process)</h3>
+  <p><b>Confidence:</b> 75% &nbsp; <b>Layer:</b> userspace</p>
+  <p><b>Evidence:</b></p><ul><li><b>[userspace_diff]</b> DMA-BUF total grew by 128.0 MB</li><li><b>[userspace_diff]</b> KGSL GPU memory grew by 64.0 MB</li><li><b>[userspace_diff]</b> Process 'surfaceflinger' PSS also growing (48.0 MB)</li></ul>
+  <p><b>Hypothesis:</b> A graphics or media subsystem is accumulating GPU/display buffers. Common causes: surfaceflinger buffer leak, video decoder not releasing frames, camera HAL holding buffers.</p>
+  <p><b>Recommended actions:</b></p><ol><li>Check `cat /sys/kernel/debug/dma_buf/bufinfo` for growing allocators</li><li>Monitor KGSL per-process: `cat /sys/class/kgsl/kgsl/proc/*/mem`</li><li>Check for unclosed EGL surfaces or unreleased MediaCodec buffers</li></ol>
+</div>
+<div class='card warning'>
+  <h3>[WARNING] ANO-005: CMA exhaustion risk</h3>
+  <p><b>Confidence:</b> 72% &nbsp; <b>Layer:</b> kernel</p>
+  <p><b>Evidence:</b></p><ul><li><b>[comparison]</b> CMA Used grew by 96.0 MB (+38.4%)</li></ul>
+  <p><b>Hypothesis:</b> CMA usage is growing, which may exhaust contiguous memory available for camera, video, and ADSP subsystems.</p>
+  <p><b>Recommended actions:</b></p><ol><li>Check `cat /sys/kernel/debug/cma/*/used` for per-region usage</li><li>Identify which subsystem is consuming CMA (camera, video, ADSP)</li><li>Consider increasing CMA pool size if usage is legitimate</li></ol>
+</div>
+<h2>Memory Delta Summary</h2>
+<p style='color:#888;font-size:0.85em'>Source: sample-reports/sample_comparison_report.json</p>
+
+<p><b>Current:</b> after_test &nbsp;|&nbsp;
+   <b>Reference:</b> baseline</p>
+<table>
+<tr><th>Category</th><th>Reference MB</th><th>Current MB</th>
+    <th>Delta MB</th><th>Delta %</th><th>Trend</th></tr>
+<tr class=''><td>MemTotal</td><td style='text-align:right'>12000.0</td><td style='text-align:right'>12000.0</td><td style='text-align:right'>+0.0</td><td style='text-align:right'>+0.0%</td><td>STABLE</td></tr>
+<tr class='shrinking'><td>MemFree</td><td style='text-align:right'>3072.0</td><td style='text-align:right'>1024.0</td><td style='text-align:right'>-2048.0</td><td style='text-align:right'>-66.7%</td><td>SHRINKING</td></tr>
+<tr class='growing'><td>Slab</td><td style='text-align:right'>512.0</td><td style='text-align:right'>824.0</td><td style='text-align:right'>+312.0</td><td style='text-align:right'>+60.9%</td><td>GROWING</td></tr>
+<tr class='growing'><td>Vmalloc</td><td style='text-align:right'>128.0</td><td style='text-align:right'>160.0</td><td style='text-align:right'>+32.0</td><td style='text-align:right'>+25.0%</td><td>GROWING</td></tr>
+<tr class='growing'><td>PageTables</td><td style='text-align:right'>32.0</td><td style='text-align:right'>36.0</td><td style='text-align:right'>+4.0</td><td style='text-align:right'>+12.5%</td><td>GROWING</td></tr>
+<tr class='growing'><td>KernelStack</td><td style='text-align:right'>8.0</td><td style='text-align:right'>8.5</td><td style='text-align:right'>+0.5</td><td style='text-align:right'>+6.2%</td><td>GROWING</td></tr>
+<tr class='growing'><td>AnonPages</td><td style='text-align:right'>4096.0</td><td style='text-align:right'>4352.0</td><td style='text-align:right'>+256.0</td><td style='text-align:right'>+6.2%</td><td>GROWING</td></tr>
+<tr class='growing'><td>Shmem</td><td style='text-align:right'>64.0</td><td style='text-align:right'>68.0</td><td style='text-align:right'>+4.0</td><td style='text-align:right'>+6.2%</td><td>GROWING</td></tr>
+<tr class=''><td>Cached</td><td style='text-align:right'>1600.0</td><td style='text-align:right'>1536.0</td><td style='text-align:right'>-64.0</td><td style='text-align:right'>-4.0%</td><td>STABLE</td></tr>
+<tr class=''><td>Buffers</td><td style='text-align:right'>200.0</td><td style='text-align:right'>192.0</td><td style='text-align:right'>-8.0</td><td style='text-align:right'>-4.0%</td><td>STABLE</td></tr>
+<tr class='growing'><td>SwapCached</td><td style='text-align:right'>16.0</td><td style='text-align:right'>32.0</td><td style='text-align:right'>+16.0</td><td style='text-align:right'>+100.0%</td><td>GROWING</td></tr>
+<tr class='growing'><td>DMA-BUF</td><td style='text-align:right'>200.0</td><td style='text-align:right'>328.0</td><td style='text-align:right'>+128.0</td><td style='text-align:right'>+64.0%</td><td>GROWING</td></tr>
+<tr class='growing'><td>KGSL</td><td style='text-align:right'>128.0</td><td style='text-align:right'>192.0</td><td style='text-align:right'>+64.0</td><td style='text-align:right'>+50.0%</td><td>GROWING</td></tr>
+<tr class='growing'><td>CMA Used</td><td style='text-align:right'>256.0</td><td style='text-align:right'>352.0</td><td style='text-align:right'>+96.0</td><td style='text-align:right'>+37.5%</td><td>GROWING</td></tr>
+<tr class=''><td>NHLOS Total</td><td style='text-align:right'>4096.0</td><td style='text-align:right'>4096.0</td><td style='text-align:right'>+0.0</td><td style='text-align:right'>+0.0%</td><td>STABLE</td></tr>
+</table>
+<h3>Findings</h3><ul><li class='warning'>[WARNING] Slab grew by 312.0 MB (+60.9%) since baseline</li><li class='warning'>[WARNING] DMA-BUF grew by 128.0 MB (+64.0%) since baseline</li><li class='warning'>[WARNING] KGSL grew by 64.0 MB (+50.0%) since baseline</li><li class='warning'>[WARNING] CMA Used grew by 96.0 MB (+37.5%) since baseline</li></ul>
+
+</body></html>

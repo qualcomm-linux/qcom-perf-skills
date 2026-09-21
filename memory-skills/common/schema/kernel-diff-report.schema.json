@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://qualcomm.com/memory-skills/schemas/kernel-diff-report/1.0.0",
+  "title": "KernelDiffReport",
+  "description": "Kernel memory difference report produced by the kernel-diff skill.",
+  "type": "object",
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version":       { "type": "string", "const": "1.0.0" },
+    "current_snapshot_id":  { "type": "string" },
+    "reference_snapshot_id":{ "type": "string" },
+    "slab_diff": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "ref_kb", "cur_kb", "delta_kb", "delta_pct"],
+        "properties": {
+          "name":      { "type": "string" },
+          "ref_kb":    { "type": "number" },
+          "cur_kb":    { "type": "number" },
+          "delta_kb":  { "type": "number" },
+          "delta_pct": { "type": "number" },
+          "flagged":   { "type": "boolean" }
+        }
+      }
+    },
+    "vmalloc_diff": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["caller", "ref_kb", "cur_kb", "delta_kb"],
+        "properties": {
+          "caller":   { "type": "string" },
+          "ref_kb":   { "type": "number" },
+          "cur_kb":   { "type": "number" },
+          "delta_kb": { "type": "number" }
+        }
+      }
+    },
+    "module_diff": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "ref_kb", "cur_kb", "delta_kb"],
+        "properties": {
+          "name":     { "type": "string" },
+          "ref_kb":   { "type": "number" },
+          "cur_kb":   { "type": "number" },
+          "delta_kb": { "type": "number" }
+        }
+      }
+    },
+    "buddy_fragmentation": {
+      "type": "object",
+      "properties": {
+        "reference_index":         { "type": "number" },
+        "current_index":           { "type": "number" },
+        "fragmentation_index_delta": { "type": "number" }
+      }
+    },
+    "vmstat_diff": {
+      "type": "object",
+      "description": "Key vmstat counter deltas. Keys are vmstat field names, values are integer deltas.",
+      "additionalProperties": { "type": "integer" }
+    },
+    "top_slab_growers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name":      { "type": "string" },
+          "delta_kb":  { "type": "number" },
+          "delta_pct": { "type": "number" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["CRITICAL", "WARNING", "INFO"] },
+          "message":  { "type": "string" }
+        }
+      }
+    }
+  }
+}

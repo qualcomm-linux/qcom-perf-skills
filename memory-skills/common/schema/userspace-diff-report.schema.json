@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://qualcomm.com/memory-skills/schemas/userspace-diff-report/1.0.0",
+  "title": "UserspaceDiffReport",
+  "description": "Userspace memory difference report produced by the userspace-diff skill.",
+  "type": "object",
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version":        { "type": "string", "const": "1.0.0" },
+    "current_snapshot_id":   { "type": "string" },
+    "reference_snapshot_id": { "type": "string" },
+    "process_diff": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "ref_pss_kb", "cur_pss_kb", "delta_pss_kb"],
+        "properties": {
+          "pid":          { "type": "integer" },
+          "name":         { "type": "string" },
+          "ref_pss_kb":   { "type": "number" },
+          "cur_pss_kb":   { "type": "number" },
+          "delta_pss_kb": { "type": "number" },
+          "delta_pct":    { "type": "number" },
+          "ref_rss_kb":   { "type": "number" },
+          "cur_rss_kb":   { "type": "number" },
+          "flagged":      { "type": "boolean" }
+        }
+      }
+    },
+    "dmabuf_diff": {
+      "type": "object",
+      "properties": {
+        "total_ref_kb": { "type": "number" },
+        "total_cur_kb": { "type": "number" },
+        "delta_kb":     { "type": "number" },
+        "by_allocator": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "allocator": { "type": "string" },
+              "ref_kb":    { "type": "number" },
+              "cur_kb":    { "type": "number" },
+              "delta_kb":  { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "kgsl_diff": {
+      "type": "object",
+      "properties": {
+        "total_ref_kb": { "type": "number" },
+        "total_cur_kb": { "type": "number" },
+        "delta_kb":     { "type": "number" },
+        "by_process": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name":     { "type": "string" },
+              "ref_kb":   { "type": "number" },
+              "cur_kb":   { "type": "number" },
+              "delta_kb": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "new_processes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pid":    { "type": "integer" },
+          "name":   { "type": "string" },
+          "pss_kb": { "type": "number" }
+        }
+      }
+    },
+    "exited_processes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pid":    { "type": "integer" },
+          "name":   { "type": "string" },
+          "pss_kb": { "type": "number" }
+        }
+      }
+    },
+    "top_pss_growers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name":         { "type": "string" },
+          "delta_pss_kb": { "type": "number" },
+          "delta_pct":    { "type": "number" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["CRITICAL", "WARNING", "INFO"] },
+          "message":  { "type": "string" }
+        }
+      }
+    }
+  }
+}
