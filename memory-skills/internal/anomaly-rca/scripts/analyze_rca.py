@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
 """
 anomaly-rca -- Anomaly Correlation & Root Cause Analysis
 Ingests findings from any combination of memory skill report JSONs,

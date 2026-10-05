@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * test_mmap_alloc.c -- Memory skill validation: anonymous mmap allocation
  *
  * Allocates N MB via mmap(MAP_ANONYMOUS) + memset (touches all pages).

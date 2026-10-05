@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * test_malloc_alloc.c -- Memory skill validation: userspace heap allocation
  *
  * Allocates N MB via malloc + memset (touches all pages).

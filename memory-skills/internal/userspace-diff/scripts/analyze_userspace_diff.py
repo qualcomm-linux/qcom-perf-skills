@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
 """
 userspace-diff -- Userspace Memory Difference Analysis
 Computes per-process PSS/RSS deltas, DMA-BUF allocator changes,

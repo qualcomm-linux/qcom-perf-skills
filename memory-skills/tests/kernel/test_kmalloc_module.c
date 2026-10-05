@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * test_kmalloc_module.c -- Memory skill validation: kernel slab allocation
  *
  * Loadable kernel module that allocates N MB via kmalloc.

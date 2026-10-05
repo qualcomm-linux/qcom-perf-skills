@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
 """
 report-generation -- Unified Report Generator
 Renders any memory skill output JSON into HTML, TXT, and/or Excel reports.

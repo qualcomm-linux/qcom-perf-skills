@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * test_shmem_alloc.c -- Memory skill validation: shared memory allocation
  *
  * Allocates N MB via shm_open + mmap(MAP_SHARED).
