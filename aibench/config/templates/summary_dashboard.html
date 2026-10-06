@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Benchmark Report Analysis</title>
+    <style>
+        :root {
+            --primary-color: #004d99; /* Qualcomm Blue */
+            --secondary-color: #f3f4f6;
+            --text-color: #333;
+            --border-color: #e5e7eb;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            color: var(--text-color);
+            background-color: #f9fafb;
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        header p {
+            margin: 0.5rem 0 0 0;
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .neutral { color: #4b5563; }
+
+        .value-tooltip {
+            cursor: help;
+            border-bottom: 1px dotted var(--primary-color);
+        }
+
+        /* Static Table Styles */
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+
+        .details-table th, .details-table td {
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .details-table th {
+            background-color: var(--secondary-color);
+            font-weight: 600;
+            color: #4b5563;
+            position: sticky;
+            top: 0;
+        }
+
+        .details-table tr:last-child td { border-bottom: none; }
+
+        .details-table tbody tr:nth-child(even) {
+            background-color: #fafbfc;
+        }
+
+        .details-table tbody tr:hover {
+            background-color: #eef4fb;
+        }
+
+        .category-cell {
+            font-weight: 600;
+            color: var(--primary-color);
+            background-color: #f8fafc;
+            border-right: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        .metric-value {
+            font-family: monospace;
+            font-size: 1.05rem;
+        }
+
+        .table-wrapper {
+            background: white;
+            border-radius: 8px;
+            box-shadow: var(--card-shadow);
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+
+        /* Regression highlighting (additive, only affects rows/cells tied to
+           the latest run when a prior run/build exists for comparison).
+           Historical columns and single-run benchmarks (no comparison
+           possible) are never affected by these rules. */
+        .row-regressed {
+            background-color: #fef2f2 !important;
+        }
+
+        .row-regressed .category-cell {
+            border-right-color: var(--danger-color);
+        }
+
+        .cell-regressed {
+            background-color: #fdecea;
+            color: var(--danger-color) !important;
+            font-weight: 700;
+            border-left: 3px solid var(--danger-color);
+        }
+
+        .cell-healthy-latest {
+            color: var(--success-color) !important;
+            font-weight: 600;
+        }
+
+        /* 4-tier dashboard enhancement styles */
+        .metric-value-regressed {
+            color: var(--danger-color) !important;
+            font-weight: 700;
+        }
+
+        .metric-value-improved {
+            color: var(--success-color) !important;
+            font-weight: 600;
+        }
+
+        .metric-value-stable {
+            color: #333 !important;
+            font-weight: 400;
+        }
+
+        .rca-col-cell {
+            background-color: #fafbfc;
+            border-left: 1px solid var(--border-color);
+            padding: 0.5rem 1rem !important;
+            vertical-align: top;
+        }
+
+        .rca-summary {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #4b5563;
+        }
+
+        .rca-title-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .rca-cause {
+            font-weight: 700;
+            color: var(--danger-color);
+        }
+
+        .rca-confidence {
+            background-color: #fee2e2;
+            color: #991b1b;
+            padding: 0.05rem 0.35rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .rca-evidence-list {
+            margin: 0.25rem 0;
+            padding-left: 1.15rem;
+        }
+
+        .rca-evidence-item {
+            margin-bottom: 0.15rem;
+        }
+
+        .rca-recommendation {
+            font-style: italic;
+            color: #6b7280;
+            margin-top: 0.25rem;
+            display: block;
+        }
+
+        .rca-badge-improved {
+            color: var(--success-color);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .rca-badge-stable {
+            color: #6b7280;
+            font-size: 0.85rem;
+        }
+
+        /* Device Information Box */
+        .device-info-box {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .device-info-box h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .device-info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        .device-info-label {
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .device-info-value {
+            color: #1f2937;
+            word-break: break-word;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Benchmark Report Analysis</h1>
+        <p>Performance Comparison Dashboard | Last Updated: {{ updated_at }}</p>
+    </header>
+
+    <div class="container">
+
+        <!-- Device Information Box -->
+        {% if device_info %}
+        <div class="device-info-box">
+            <h3>Device Information</h3>
+            <div class="device-info-grid">
+                <div class="device-info-label">Model:</div>
+                <div class="device-info-value">{{ device_info.model }}</div>
+                
+                <div class="device-info-label">Software:</div>
+                <div class="device-info-value">{{ device_info.os_pretty_name }}</div>
+                
+                <div class="device-info-label">Build ID:</div>
+                <div class="device-info-value">{{ device_info.os_build_id }}</div>
+                
+                <div class="device-info-label">Kernel:</div>
+                <div class="device-info-value">{{ device_info.kernel }}</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not benchmarks %}
+        <div style="padding: 4rem 2rem; text-align: center; background: white; border-radius: 8px; box-shadow: var(--card-shadow);">
+            <h2 style="color: #6b7280; margin-bottom: 1rem;">No benchmarks have been executed yet.</h2>
+            <p style="color: #9ca3af;">Run your benchmarks to see the results appear here.</p>
+        </div>
+        {% else %}
+
+        <!-- Find all unique history IDs to create columns -->
+        {% set unique_ids = [] %}
+        {% for b in benchmarks %}
+            {% for h in b.history %}
+                {% if h.id not in unique_ids %}
+                    {% set _ = unique_ids.append(h.id) %}
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+
+        {% set table_config = [
+            {
+                "category": "GeekBench",
+                "metrics": [
+                    {"name": "ST", "key": "geekbench_cpu_single_core", "dir": "higher", "bench": "geekbench"},
+                    {"name": "MT", "key": "geekbench_cpu_multi_core", "dir": "higher", "bench": "geekbench"}
+                ]
+            },
+            {
+                "category": "Coremark",
+                "metrics": [
+                    {"name": "Iterations/Sec", "key": "coremark_default", "dir": "higher", "bench": "coremark"}
+                ]
+            },
+            {
+                "category": "CoreMark Pro",
+                "metrics": [
+                    {"name": "core - SingleCore", "key": "coremark_pro_single_core", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "core - MultiCore", "key": "coremark_pro_multi_core", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "cjpeg-rose7-preset - SingleCore", "key": "coremark_pro_single_cjpeg-rose7-preset", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "cjpeg-rose7-preset - MultiCore", "key": "coremark_pro_multi_cjpeg-rose7-preset", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "linear_alg-mid-100x100-sp - SingleCore", "key": "coremark_pro_single_linear_alg-mid-100x100-sp", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "linear_alg-mid-100x100-sp - MultiCore", "key": "coremark_pro_multi_linear_alg-mid-100x100-sp", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "loops-all-mid-10k-sp - SingleCore", "key": "coremark_pro_single_loops-all-mid-10k-sp", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "loops-all-mid-10k-sp - MultiCore", "key": "coremark_pro_multi_loops-all-mid-10k-sp", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "nnet_test - SingleCore", "key": "coremark_pro_single_nnet_test", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "nnet_test - MultiCore", "key": "coremark_pro_multi_nnet_test", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "parser-125k - SingleCore", "key": "coremark_pro_single_parser-125k", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "parser-125k - MultiCore", "key": "coremark_pro_multi_parser-125k", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "radix2-big-64k - SingleCore", "key": "coremark_pro_single_radix2-big-64k", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "radix2-big-64k - MultiCore", "key": "coremark_pro_multi_radix2-big-64k", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "sha-test - SingleCore", "key": "coremark_pro_single_sha-test", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "sha-test - MultiCore", "key": "coremark_pro_multi_sha-test", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "zip-test - SingleCore", "key": "coremark_pro_single_zip-test", "dir": "higher", "bench": "coremark_pro"},
+                    {"name": "zip-test - MultiCore", "key": "coremark_pro_multi_zip-test", "dir": "higher", "bench": "coremark_pro"}
+                ]
+            },
+            {
+                "category": "UnixBench",
+                "metrics": [
+                    {"name": "Single Core Index Score", "key": "unixbench_single_core", "dir": "higher", "bench": "unixbench"},
+                    {"name": "Multi Core Index Score", "key": "unixbench_multi_core", "dir": "higher", "bench": "unixbench"},
+                    {"name": "Scaling Efficiency (%)", "key": "unixbench_scaling", "dir": "higher", "bench": "unixbench"}
+                ]
+            },
+            {
+                "category": "Sysbench",
+                "metrics": [
+                    {"name": "CPU total time(s) (Lower is better) - ST", "key": "sysbench_cpu_prime_single_test_total_time_sec", "dir": "lower", "bench": "sysbench"},
+                    {"name": "CPU total time(s) (Lower is better) - MT", "key": "sysbench_cpu_prime_multi_test_total_time_sec", "dir": "lower", "bench": "sysbench"},
+                    {"name": "Memory Seq Read (MB/s) (Higher is better)", "key": "sysbench_memory_seq_read_test", "dir": "higher", "bench": "sysbench"},
+                    {"name": "Memory Seq Write (MB/s) (Higher is better)", "key": "sysbench_memory_seq_write_test", "dir": "higher", "bench": "sysbench"},
+                    {"name": "Memory Rnd Read (MB/s) (Higher is better)", "key": "sysbench_memory_random_read", "dir": "higher", "bench": "sysbench"},
+                    {"name": "Memory Rnd Write (MB/s) (Higher is better)", "key": "sysbench_memory_random_write", "dir": "higher", "bench": "sysbench"},
+                    {"name": "Thread total time (s) (Lower is better)", "key": "sysbench_threads_scheduler_test_total_time_sec", "dir": "lower", "bench": "sysbench"},
+                    {"name": "Mutex total time (s) (Lower is better)", "key": "sysbench_mutex_contention_test_total_time_sec", "dir": "lower", "bench": "sysbench"},
+                    {"name": "FileIO Seq Read (MB/s) (Higher is better)", "key": "sysbench_fileio_seq_read_test", "dir": "higher", "bench": "sysbench"},
+                    {"name": "FileIO Seq Write (MB/s) (Higher is better)", "key": "sysbench_fileio_seq_write_test", "dir": "higher", "bench": "sysbench"},
+                    {"name": "FileIO Rnd Read (MB/s) (Higher is better)", "key": "sysbench_fileio_random_read_test", "dir": "higher", "bench": "sysbench"},
+                    {"name": "FileIO Rnd Write (MB/s) (Higher is better)", "key": "sysbench_fileio_random_write_test", "dir": "higher", "bench": "sysbench"},
+                    {"name": "FileIO Rnd Mixed (MB/s) (Higher is better)", "key": "sysbench_fileio_random_mixed_test", "dir": "higher", "bench": "sysbench"}
+                ]
+            },
+            {
+                "category": "Tiotest (Higher is better)",
+                "metrics": [
+                    {"name": "256 MB/thread, 512 KiB blocks, Sequential Read/Write - Write", "key": "sequential_write_rate", "dir": "higher", "bench": "tiobench"},
+                    {"name": "256 MB/thread, 512 KiB blocks, Sequential Read/Write - Read", "key": "sequential_read_rate", "dir": "higher", "bench": "tiobench"},
+                    {"name": "64 MB/thread, 4 KiB blocks, Random Read/Write - Write", "key": "random_write_rate", "dir": "higher", "bench": "tiobench"},
+                    {"name": "64 MB/thread, 4 KiB blocks, Random Read/Write - Read", "key": "random_read_rate", "dir": "higher", "bench": "tiobench"}
+                ]
+            },
+            {
+                "category": "GLMark2",
+                "metrics": [
+                    {"name": "Default", "key": "glmark2_default", "dir": "higher", "bench": "glmark2"},
+                    {"name": "1920x1080", "key": "glmark2_1920x1080", "dir": "higher", "bench": "glmark2"},
+                    {"name": "Offscreen", "key": "glmark2_offscreen", "dir": "higher", "bench": "glmark2"},
+                    {"name": "Offscreen 1920x1080", "key": "glmark2_offscreen_1920x1080", "dir": "higher", "bench": "glmark2"}
+                ]
+            },
+            {
+                "category": "Hackbench",
+                "metrics": [
+                    {"name": "Sched IPC Default", "key": "sched_ipc_default", "dir": "higher", "bench": "hackbench"},
+                    {"name": "Sched IPC Heavy", "key": "sched_ipc_heavy", "dir": "higher", "bench": "hackbench"},
+                    {"name": "Sched IPC Sockets Extreme", "key": "sched_ipc_sockets_extreme", "dir": "higher", "bench": "hackbench"}
+                ]
+            },
+            {
+                "category": "OSBench (Lower is better)",
+                "metrics": [
+                    {"name": "Launch Programs (us/program)", "key": "osbench_launch_programs", "dir": "lower", "bench": "osbench"},
+                    {"name": "Create Files (us/file)", "key": "osbench_create_files", "dir": "lower", "bench": "osbench"},
+                    {"name": "Create Processes (us/process)", "key": "osbench_create_processes", "dir": "lower", "bench": "osbench"},
+                    {"name": "Create Threads (us/thread)", "key": "osbench_create_threads", "dir": "lower", "bench": "osbench"}
+                ]
+            },
+            {
+                "category": "RAMSpeed (Higher is better)",
+                "metrics": [
+                    {"name": "Integer Read - ST", "key": "ramspeed_single_b2_intmark_reading", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Integer Read - MT", "key": "ramspeed_multi_b2_intmark_reading", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Integer Write - ST", "key": "ramspeed_single_b1_intmark_writing", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Integer Write - MT", "key": "ramspeed_multi_b1_intmark_writing", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Integer Average - ST", "key": "ramspeed_single_b3_integer_average", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Integer Average - MT", "key": "ramspeed_multi_b3_integer_average", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Float Read - ST", "key": "ramspeed_single_b5_floatmark_reading", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Float Read - MT", "key": "ramspeed_multi_b5_floatmark_reading", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Float Write - ST", "key": "ramspeed_single_b4_floatmark_writing", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Float Write - MT", "key": "ramspeed_multi_b4_floatmark_writing", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Float Average - ST", "key": "ramspeed_single_b6_float_average", "dir": "higher", "bench": "ramspeed"},
+                    {"name": "Float Average - MT", "key": "ramspeed_multi_b6_float_average", "dir": "higher", "bench": "ramspeed"}
+                ]
+            },
+            {
+                "category": "bw_mem (Higher is better) [GB/s]",
+                "metrics": [
+                    {"name": "Read", "key": "bw_mem_rd_plateau", "dir": "higher", "bench": "bw_mem"},
+                    {"name": "Write", "key": "bw_mem_wr_plateau", "dir": "higher", "bench": "bw_mem"},
+                    {"name": "Copy", "key": "bw_mem_cp_plateau", "dir": "higher", "bench": "bw_mem"},
+                    {"name": "Read-Modify-Write", "key": "bw_mem_rdwr_plateau", "dir": "higher", "bench": "bw_mem"},
+                    {"name": "Full Read", "key": "bw_mem_frd_plateau", "dir": "higher", "bench": "bw_mem"},
+                    {"name": "Full Write", "key": "bw_mem_fwr_plateau", "dir": "higher", "bench": "bw_mem"}
+                ]
+            },
+            {
+                "category": "lat_mem_rd (Lower is better) [ns]",
+                "metrics": [
+                    {"name": "Overall Plateau Latency", "key": "lat_mem_rd_default_overall_plateau_ns", "dir": "lower", "bench": "lat_mem_rd", "tooltip_key": "lat_mem_rd_default_iter_spread_pct"}
+                ]
+            }
+        ] %}
+
+        {# Determine error margin #}
+        {% set active_device = config.active_device | default('IQ-9075') %}
+        {% set error_margin = 0.2 %}
+        {% if config.telemetry_thresholds and config.telemetry_thresholds.devices and config.telemetry_thresholds.devices[active_device] and config.telemetry_thresholds.devices[active_device].regression %}
+            {% set error_margin = config.telemetry_thresholds.devices[active_device].regression.error_margin_threshold_percent | default(0.2) | float %}
+        {% endif %}
+
+        {# Categorize sections into 4 tiers #}
+        {% set tier1_list = [] %}
+        {% set tier2_list = [] %}
+        {% set tier3_list = [] %}
+        {% set tier4_list = [] %}
+
+        {% for section in table_config %}
+            {% set status_flags = namespace(regressed=false, improved=false, compared=false) %}
+            {% for metric in section.metrics %}
+                {% for b in benchmarks %}
+                    {% if b.name == metric.bench or (metric.bench == 'glmark2' and b.name.startswith('glmark2')) %}
+                        {% if b.history|length > 1 %}
+                            {% set status_flags.compared = true %}
+                            {% set latest_h = b.history[-1] %}
+                            {% set prior_h = b.history[-2] %}
+                            
+                            {# Check for regression #}
+                            {% if latest_h.regressions and metric.key in latest_h.regressions %}
+                                {% set reg_info = latest_h.regressions[metric.key] %}
+                                {% if reg_info.throughput_regression or reg_info.latency_regression %}
+                                    {% set status_flags.regressed = true %}
+                                {% endif %}
+                            {% endif %}
+                            
+                            {# Check for improvement if not regressed #}
+                            {% if not status_flags.regressed %}
+                                {% if metric.key in latest_h.statistics and metric.key in prior_h.statistics %}
+                                    {% set latest_mean = latest_h.statistics[metric.key].mean | float %}
+                                    {% set prior_mean = prior_h.statistics[metric.key].mean | float %}
+                                    {% if prior_mean != 0 %}
+                                        {% set delta_percent = ((latest_mean - prior_mean) / prior_mean) * 100.0 %}
+                                        {% set diff_pct = delta_percent %}
+                                        {% if metric.dir == 'lower' %}
+                                            {% set diff_pct = -delta_percent %}
+                                        {% endif %}
+                                        
+                                        {% if diff_pct > error_margin %}
+                                            {% set status_flags.improved = true %}
+                                        {% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            {% endif %}
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+            
+            {% if status_flags.regressed %}
+                {% set _ = tier1_list.append(section) %}
+            {% elif status_flags.improved %}
+                {% set _ = tier2_list.append(section) %}
+            {% elif status_flags.compared %}
+                {% set _ = tier3_list.append(section) %}
+            {% else %}
+                {% set _ = tier4_list.append(section) %}
+            {% endif %}
+        {% endfor %}
+
+        {# Sort tiers alphabetically by category name #}
+        {% set sorted_tier1 = tier1_list | sort(attribute="category") %}
+        {% set sorted_tier2 = tier2_list | sort(attribute="category") %}
+        {% set sorted_tier3 = tier3_list | sort(attribute="category") %}
+        {% set sorted_tier4 = tier4_list %}
+
+        {% set any_regressions_exist = (sorted_tier1 | length) > 0 %}
+
+        {# Build final flat list with tier annotation #}
+        {% set all_sorted_sections = [] %}
+        {% for s in sorted_tier1 %}{% set _ = all_sorted_sections.append({"section": s, "tier": 1}) %}{% endfor %}
+        {% for s in sorted_tier2 %}{% set _ = all_sorted_sections.append({"section": s, "tier": 2}) %}{% endfor %}
+        {% for s in sorted_tier3 %}{% set _ = all_sorted_sections.append({"section": s, "tier": 3}) %}{% endfor %}
+        {% for s in sorted_tier4 %}{% set _ = all_sorted_sections.append({"section": s, "tier": 4}) %}{% endfor %}
+
+        <div class="table-wrapper">
+            <table class="details-table">
+                <thead>
+                    <tr>
+                        <th style="width: {% if any_regressions_exist %}15%{% else %}18%{% endif %};">Category</th>
+                        <th style="width: {% if any_regressions_exist %}25%{% else %}32%{% endif %};">Metric</th>
+                        {% if unique_ids|length == 1 %}
+                            <th>Value</th>
+                        {% else %}
+                            {% for col_id in unique_ids %}
+                                <th>{{ col_id }}</th>
+                            {% endfor %}
+                        {% endif %}
+                        {% if any_regressions_exist %}
+                            <th style="width: 30%;">Root Cause Analysis</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in all_sorted_sections %}
+                        {% set section = entry.section %}
+                        {% set tier = entry.tier %}
+                        {% for metric in section.metrics %}
+                            <tr{% if tier == 1 %} class="row-regressed"{% endif %}>
+                                {% if loop.first %}
+                                <td rowspan="{{ section.metrics|length }}" class="category-cell">
+                                    {{ section.category }}
+                                </td>
+                                {% endif %}
+                                <td style="font-weight: 500;">
+                                    {{ metric.name }}
+                                </td>
+
+                                {% for col_id in unique_ids %}
+                                    {% set val = namespace(value="N/A") %}
+                                    {% set tooltip_text = namespace(value="") %}
+                                    {% set cell_status = namespace(value="none") %}
+                                    {% for b in benchmarks %}
+                                        {% if b.name == metric.bench or (metric.bench == 'glmark2' and b.name.startswith('glmark2')) %}
+                                            {% for h in b.history %}
+                                                {% if h.id == col_id %}
+                                                    {% if metric.key in h.statistics %}
+                                                        {% set val.value = h.statistics[metric.key].mean %}
+                                                    {% endif %}
+                                                    
+                                                    {# Regression/health/stable coloring on the LATEST column only #}
+                                                    {% if b.history[-1].id == h.id and b.history|length > 1 %}
+                                                        {% if h.regressions and metric.key in h.regressions %}
+                                                            {% set reg_info = h.regressions[metric.key] %}
+                                                            {% if reg_info.throughput_regression or reg_info.latency_regression %}
+                                                                {% set cell_status.value = "regressed" %}
+                                                            {% else %}
+                                                                {# Check if improved or stable #}
+                                                                {% if metric.key in h.statistics and b.history[-2].statistics and metric.key in b.history[-2].statistics %}
+                                                                    {% set latest_mean = h.statistics[metric.key].mean | float %}
+                                                                    {% set prior_mean = b.history[-2].statistics[metric.key].mean | float %}
+                                                                    {% if prior_mean != 0 %}
+                                                                        {% set delta_percent = ((latest_mean - prior_mean) / prior_mean) * 100.0 %}
+                                                                        {% set diff_pct = delta_percent %}
+                                                                        {% if metric.dir == 'lower' %}
+                                                                            {% set diff_pct = -delta_percent %}
+                                                                        {% endif %}
+                                                                        
+                                                                        {% if diff_pct > error_margin %}
+                                                                            {% set cell_status.value = "improved" %}
+                                                                        {% else %}
+                                                                            {% set cell_status.value = "stable" %}
+                                                                        {% endif %}
+                                                                    {% else %}
+                                                                        {% set cell_status.value = "stable" %}
+                                                                    {% endif %}
+                                                                {% else %}
+                                                                    {% set cell_status.value = "stable" %}
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    {% endif %}
+
+                                                    {% if metric.tooltip_key and metric.tooltip_key in h.statistics %}
+                                                        {% set spread_val = h.statistics[metric.tooltip_key].mean %}
+                                                        {% set iter_parts = [] %}
+                                                        {% for iter_num in range(1, 10) %}
+                                                            {% set iter_key = metric.key | replace('overall_plateau_ns', 'iter' ~ iter_num ~ '_plateau_ns') %}
+                                                            {% if iter_key in h.statistics %}
+                                                                {% set _ = iter_parts.append('p' ~ iter_num ~ '=' ~ ('%.2f'|format(h.statistics[iter_key].mean)) ~ ' ns') %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {% set tooltip_text.value = 'Iteration plateaus: ' ~ (iter_parts | join(', ')) ~ ' | Iteration-to-iteration spread: ' ~ ('%.2f'|format(spread_val)) ~ '%' %}
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% set cell_extra_class = "" %}
+                                    {% if cell_status.value == "regressed" %}
+                                        {% set cell_extra_class = " cell-regressed" %}
+                                    {% elif cell_status.value == "improved" %}
+                                        {% set cell_extra_class = " metric-value-improved" %}
+                                    {% elif cell_status.value == "stable" %}
+                                        {% set cell_extra_class = " metric-value-stable" %}
+                                    {% endif %}
+
+                                    {% if val.value == "N/A" %}
+                                        <td class="neutral">N/A</td>
+                                    {% elif tooltip_text.value %}
+                                        <td class="{{ cell_extra_class }}">
+                                            <span class="value-tooltip metric-value" title="{{ tooltip_text.value }}">{{ "%.2f"|format(val.value) }}</span>
+                                        </td>
+                                    {% else %}
+                                        <td class="metric-value{{ cell_extra_class }}">{{ "%.2f"|format(val.value) }}</td>
+                                    {% endif %}
+                                {% endfor %}
+
+                                {# Conditionally render Root Cause Analysis column #}
+                                {% if any_regressions_exist %}
+                                    <td class="rca-col-cell">
+                                        {% set rca_found = namespace(printed=false) %}
+                                        {% for b in benchmarks %}
+                                            {% if b.name == metric.bench or (metric.bench == 'glmark2' and b.name.startswith('glmark2')) %}
+                                                {% if b.history|length > 1 %}
+                                                    {% set latest_h = b.history[-1] %}
+                                                    {% if latest_h.regressions and metric.key in latest_h.regressions %}
+                                                        {% set reg_info = latest_h.regressions[metric.key] %}
+                                                        {% if reg_info.throughput_regression or reg_info.latency_regression %}
+                                                            {# Display RCA #}
+                                                            {% if latest_h.rca and metric.key in latest_h.rca %}
+                                                                {% set rca_item = latest_h.rca[metric.key] %}
+                                                                <div class="rca-summary">
+                                                                    <div class="rca-title-container">
+                                                                        <span class="rca-cause">{{ rca_item.cause }}</span>
+                                                                        <span class="rca-confidence">{{ rca_item.confidence }} confidence</span>
+                                                                    </div>
+                                                                    {% if rca_item.evidence %}
+                                                                        <ul class="rca-evidence-list">
+                                                                            {% for ev in rca_item.evidence %}
+                                                                                {% if ev is string %}
+                                                                                <li class="rca-evidence-item">{{ ev }}</li>
+                                                                                {% else %}
+                                                                                <li class="rca-evidence-item">
+                                                                                    <strong>[{{ ev.type }}]</strong> {{ ev.source }}: {{ ev.value }}
+                                                                                    <br><em>{{ ev.interpretation }}</em>
+                                                                                </li>
+                                                                                {% endif %}
+                                                                            {% endfor %}
+                                                                        </ul>
+                                                                    {% endif %}
+                                                                    {% if rca_item.recommendation %}
+                                                                        <span class="rca-recommendation"><strong>Recommendation:</strong> {{ rca_item.recommendation }}</span>
+                                                                    {% endif %}
+                                                                </div>
+                                                                {% set rca_found.printed = true %}
+                                                            {% endif %}
+                                                        {% else %}
+                                                            {# Check for improved/stable with delta #}
+                                                            {% if metric.key in latest_h.statistics and b.history[-2].statistics and metric.key in b.history[-2].statistics %}
+                                                                {% set latest_mean = latest_h.statistics[metric.key].mean | float %}
+                                                                {% set prior_mean = b.history[-2].statistics[metric.key].mean | float %}
+                                                                {% if prior_mean != 0 %}
+                                                                    {% set delta_percent = ((latest_mean - prior_mean) / prior_mean) * 100.0 %}
+                                                                    {% set diff_pct = delta_percent %}
+                                                                    {% if metric.dir == 'lower' %}
+                                                                        {% set diff_pct = -delta_percent %}
+                                                                    {% endif %}
+                                                                    
+                                                                    {% if diff_pct > error_margin %}
+                                                                        <span class="rca-badge-improved">✓ Improved ({{"%+.2f"|format(delta_percent)}}%)</span>
+                                                                        {% set rca_found.printed = true %}
+                                                                    {% else %}
+                                                                        <span class="rca-badge-stable">Stable ({{"%+.2f"|format(delta_percent)}}%)</span>
+                                                                        {% set rca_found.printed = true %}
+                                                                    {% endif %}
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if not rca_found.printed %}
+                                            <span class="rca-badge-stable">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% endif %}
+
+    </div>
+
+</body>
+</html>

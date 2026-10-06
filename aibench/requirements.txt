@@ -1,0 +1,15 @@
+# AI powered Smart Benchmark Harness (AIBench)  — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core
+PyYAML>=6.0
+Jinja2>=3.1
+paramiko>=3.0          # SSH connection support
+pyserial>=3.5          # Serial console connection support
+
+# Reporting
+openpyxl>=3.1          # Excel report generation (benchmark_report_*.xlsx)
+
+# Statistical analysis (optional but recommended for full regression detection)
+scipy>=1.10
+numpy>=1.24

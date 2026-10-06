@@ -1,0 +1,102 @@
+{
+  "mappings": [
+    {
+      "code_location": "src/benchmark/*.py",
+      "section": "5",
+      "subsection": "Benchmark Implementations",
+      "pattern": "class.*Benchmark.*BenchmarkBase",
+      "description": "Benchmark implementation classes"
+    },
+    {
+      "code_location": "src/reporting/outlier_detector*.py",
+      "section": "6",
+      "subsection": "Outlier Detection",
+      "pattern": "class.*OutlierDetector",
+      "description": "Outlier detection implementations"
+    },
+    {
+      "code_location": "src/utils/telemetry/",
+      "section": "7",
+      "subsection": "Telemetry Collection Pipeline",
+      "pattern": "def.*telemetry|class.*Telemetry",
+      "description": "Telemetry collection scripts and parsers"
+    },
+    {
+      "code_location": "src/reporting/regression_detector.py",
+      "section": "8",
+      "subsection": "Regression Detection",
+      "pattern": "def.*detect.*|class.*Detector",
+      "description": "Statistical regression detection methods"
+    },
+    {
+      "code_location": "src/reporting/rca_detector.py",
+      "section": "9",
+      "subsection": "Root Cause Analysis (RCA)",
+      "pattern": "def.*analyze|class.*RCA",
+      "description": "RCA engine and anomaly evaluation"
+    },
+    {
+      "code_location": "src/reporting/aggregator.py",
+      "section": "10",
+      "subsection": "Reporting & Aggregation",
+      "pattern": "def.*aggregate|class.*Aggregator",
+      "description": "Result aggregation and reporting"
+    },
+    {
+      "code_location": "config/benchmarks.yaml",
+      "section": "11",
+      "subsection": "Configuration System",
+      "pattern": ".*",
+      "description": "Configuration parameters and device profiles"
+    },
+    {
+      "code_location": "main.py",
+      "section": "12",
+      "subsection": "Control Flow & Execution",
+      "pattern": "def.*main|class.*Orchestrator",
+      "description": "Main orchestration and execution flow"
+    }
+  ],
+  "section_details": {
+    "5": {
+      "title": "Benchmark Implementations",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "6": {
+      "title": "Outlier Detection",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "7": {
+      "title": "Telemetry Collection Pipeline",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "8": {
+      "title": "Regression Detection",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "9": {
+      "title": "Root Cause Analysis (RCA)",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "10": {
+      "title": "Reporting & Aggregation",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "11": {
+      "title": "Configuration System",
+      "auto_update": true,
+      "preserve_manual": true
+    },
+    "12": {
+      "title": "Control Flow & Execution",
+      "auto_update": true,
+      "preserve_manual": true
+    }
+  }
+}

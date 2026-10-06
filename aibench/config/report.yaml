@@ -1,0 +1,8 @@
+# Configuration for regression checks and templates
+thresholds:
+  throughput: -0.05
+  latency: 0.10
+
+templates:
+  individual: config/templates/individual_report.html
+  dashboard: config/templates/summary_dashboard.html
