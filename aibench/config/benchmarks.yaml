@@ -72,7 +72,7 @@ telemetry_thresholds:
       vmstat:
         # Per-second rates; a sample exceeding these is flagged as a spike.
         context_switch_spike_per_sec: 50000
-        page_fault_spike_per_sec: 100000
+        swap_activity_spike_per_sec: 100000
         io_wait_spike_percent: 30
         free_memory_low_mb: 50  # 50 MB free considered critically low
       top:

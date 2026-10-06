@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.utils.logger import phase_logger as benchmark_logger
+from src.utils.serial_executor import SerialCommandError
 from src.reporting.outlier_registry import OutlierDetectorRegistry
 from src.utils.telemetry_helpers import push_telemetry_scripts, start_telemetry_only, teardown_telemetry
 
@@ -348,7 +349,11 @@ class LatMemRd:
                 output = serial_executor.execute_command(
                     cmd, timeout_override=0, prefer_stderr=True
                 )
-            except Exception as e:
+            except SerialCommandError as e:
+                # Transport-level failure (connection drop, command
+                # write/read timeout) - legitimately retryable, unlike a
+                # bug in this method's own logic, which should propagate
+                # instead of being silently retried away.
                 benchmark_logger.warning(f"{_LOG_PREFIX} Command execution failed: {e}")
                 continue
 

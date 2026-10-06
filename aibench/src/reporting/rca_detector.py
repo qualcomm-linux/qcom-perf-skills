@@ -53,7 +53,7 @@ class RCADetector:
         freq_drops = build_anomalies.get("cpu_frequency_drops", [])
         oom_kills = build_anomalies.get("oom_kills", [])
         context_switches = build_anomalies.get("context_switch_spike", [])
-        page_faults = build_anomalies.get("page_fault_spike", [])
+        swap_activity = build_anomalies.get("swap_activity_spike", [])
         io_wait = build_anomalies.get("io_wait_spike", [])
         memory_pressure = build_anomalies.get("memory_pressure", [])
         process_cpu_anomalies = build_anomalies.get("process_cpu_anomalies", [])
@@ -125,11 +125,11 @@ class RCADetector:
                 rca_result["evidence"].append({"type": "OBSERVED", "source": "vmstat", "value": f"{len(io_wait)} samples", "interpretation": "I/O wait spiked above threshold"})
                 rca_result["recommendation"] = "Check disk I/O patterns, storage performance, and concurrent I/O-bound background processes."
 
-            elif len(page_faults) > 0:
+            elif len(swap_activity) > 0:
                 rca_result["cause"] = "Memory Pressure / Paging"
                 rca_result["confidence"] = "70%"
-                rca_result["confidence_basis"] = "Circumstantial: vmstat page-fault rate exceeded the configured threshold, suggesting excessive paging/cache-miss activity that can degrade throughput."
-                rca_result["evidence"].append({"type": "OBSERVED", "source": "vmstat", "value": f"{len(page_faults)} samples", "interpretation": "Page fault rate spiked above threshold"})
+                rca_result["confidence_basis"] = "Circumstantial: vmstat swap-activity (si+so) rate exceeded the configured threshold, suggesting excessive swapping/cache-miss activity that can degrade throughput."
+                rca_result["evidence"].append({"type": "OBSERVED", "source": "vmstat", "value": f"{len(swap_activity)} samples", "interpretation": "Swap activity rate spiked above threshold"})
                 rca_result["recommendation"] = "Check memory allocation patterns and cache efficiency; consider reducing working-set size or improving locality."
 
             elif len(context_switches) > 0 or len(task_migration_high) > 0:

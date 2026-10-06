@@ -54,9 +54,9 @@ ELIF vmstat.free_memory_mb < free_memory_low_mb (e.g. 50MB):
     ADD CAUSE: "Severe Memory Pressure" (Confidence: 80%)
     EVIDENCE: "Free memory dropped to {vmstat.free_memory_mb}MB, likely causing excessive page reclamation."
     
-ELIF vmstat.page_fault_spike > page_fault_spike_per_sec (e.g. 100k/s):
-    ADD CAUSE: "High Page Fault Rate" (Confidence: 75%)
-    EVIDENCE: "Page faults spiked to {spike} per second, indicating memory thrashing or heavy swap usage."
+ELIF vmstat.swap_activity_spike > swap_activity_spike_per_sec (e.g. 100k/s):
+    ADD CAUSE: "High Swap Activity" (Confidence: 75%)
+    EVIDENCE: "Swap activity spiked to {spike} per second, indicating memory thrashing or heavy swap usage."
 ```
 
 ### Category 3: I/O Bottlenecks (Priority: Medium)

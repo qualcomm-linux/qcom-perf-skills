@@ -9,9 +9,8 @@ benchmark harness (sysbench, tiobench, or future additions) can adopt for
 consistent, structured, machine-readable logging.
 
 This module is standalone - it is NOT currently wired into any existing
-harness or into outlier_detector.py. It is provided so harnesses can adopt
-it incrementally, on their own schedule, without requiring a coordinated
-migration.
+harness. It is provided so harnesses can adopt it incrementally, on their
+own schedule, without requiring a coordinated migration.
 
 Design Notes
 ------------

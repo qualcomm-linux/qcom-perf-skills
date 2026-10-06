@@ -14,7 +14,7 @@ This document provides benchmark-specific guidance for interpreting regressions 
   - **Signature:** `ftrace.sched_wakeup_latency_us` > 5000us, or `vmstat.context_switches` massively above baseline.
   - **Cause:** Another heavy process (e.g., `system_server`, indexing services) is competing for CPU time slices, causing the OS to delay scheduling the benchmark threads.
 - **Memory Allocation Limits (OSBench):**
-  - **Signature:** `osbench_memory_alloc` regresses (takes longer), and `vmstat.page_fault_spike` is high.
+  - **Signature:** `osbench_memory_alloc` regresses (takes longer), and `vmstat.swap_activity_spike` is high.
   - **Cause:** The OS is struggling to find contiguous free pages or is busy flushing the page cache to satisfy allocation requests.
 - **IPC / Socket Limits (Hackbench):**
   - If hackbench `sched_ipc_sockets_extreme` fails or regresses heavily, it often points to kernel socket buffer limits (e.g., `net.core.wmem_max`) rather than CPU frequency. Look for `OOM Kills` or `dmesg` warnings about socket exhaustion.

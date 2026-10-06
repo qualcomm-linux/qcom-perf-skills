@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import socket
+import threading
 from typing import Dict, List, Optional
 import paramiko
 
@@ -157,10 +158,22 @@ class SshManager:
         logger.debug(f"SSH Executing: {cmd}")
         try:
             stdin, stdout, stderr = self.client.exec_command(cmd, timeout=final_timeout)
-            
-            # Read output and error
+
+            # Read stdout and stderr concurrently. Reading one stream fully
+            # before the other risks a deadlock: if the remote command fills
+            # the OTHER stream's channel buffer while we're still blocked
+            # reading this one, paramiko has no way to drain it and both
+            # sides stall forever (classic subprocess/SSH pipe deadlock).
+            err_result: Dict[str, bytes] = {}
+
+            def _read_stderr():
+                err_result["data"] = stderr.read()
+
+            stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+            stderr_thread.start()
             out_bytes = stdout.read()
-            err_bytes = stderr.read()
+            stderr_thread.join()
+            err_bytes = err_result.get("data", b"")
             
             out_str = out_bytes.decode('utf-8', errors='ignore')
             err_str = err_bytes.decode('utf-8', errors='ignore')

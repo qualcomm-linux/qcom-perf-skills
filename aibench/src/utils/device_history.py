@@ -84,10 +84,14 @@ class DeviceHistoryManager:
             history = self._load_history()
             devices = history["devices"]
             
-            # Check if device already exists (by IP or model)
+            # Check if device already exists (by IP address only - the model
+            # name is shared across many physical units of the same device
+            # type, so matching on model alone would make two different
+            # physical devices with the same model silently overwrite each
+            # other's history).
             existing_idx = None
             for idx, device in enumerate(devices):
-                if device.get("ip_address") == ip_address or device.get("device_model") == device_model:
+                if device.get("ip_address") == ip_address:
                     existing_idx = idx
                     break
             

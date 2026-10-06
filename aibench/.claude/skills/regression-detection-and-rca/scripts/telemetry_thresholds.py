@@ -50,7 +50,7 @@ FALLBACK_THRESHOLDS: Dict[str, Any] = {
     },
     "vmstat": {
         "context_switch_spike_per_sec": 50000,
-        "page_fault_spike_per_sec": 100000,
+        "swap_activity_spike_per_sec": 100000,
         "io_wait_spike_percent": 30,
         "free_memory_low_mb": 50,
     },

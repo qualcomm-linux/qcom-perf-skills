@@ -165,9 +165,11 @@ class GeekbenchBenchmark:
         Main execution method called by harness.
         Returns results dictionary.
         """
+        benchmark_logger.configure_run_dir(self.run_dir)
+        benchmark_logger.set_phase("setup")
         if hasattr(self, 'setup') and callable(getattr(self, 'setup')):
             self.setup(serial_executor, adb_manager)
-            
+
         self.serial = serial_executor
         
         # Collect device info from target device
@@ -189,7 +191,7 @@ class GeekbenchBenchmark:
             "benchmark_name": self.name,
             "timestamp_utc": time.strftime("%Y-%m-%d %H:%M:%S"),
             "os_build_id": device_info.get('os_build_id', adb_manager.get_build_id() if adb_manager else "unknown"),
-            "os_pretty_name": device_info.get('os_pretty_name', getattr(adb_manager, "get_os_version", lambda: "Linux")() if adb_manager and hasattr(adb_manager, "get_os_version") else "Linux"),
+            "os_pretty_name": device_info.get('os_pretty_name', adb_manager.get_pretty_name() if adb_manager and hasattr(adb_manager, "get_pretty_name") else "Linux"),
             "total_iterations_executed": self.iterations * len(self.tests_to_run),
             "iterations_run": 0,
             "warmup_iterations_discarded": 0,
@@ -198,7 +200,19 @@ class GeekbenchBenchmark:
         }
         
         results = {"metadata": metadata, "tests": {}}
-        
+
+        benchmark_logger.set_phase("benchmark")
+        try:
+            self._run_all_tests(results)
+        finally:
+            benchmark_logger.set_phase("teardown")
+            if hasattr(self, 'teardown') and callable(getattr(self, 'teardown')):
+                self.teardown(serial_executor, adb_manager)
+            benchmark_logger.end_phase()
+
+        return results
+
+    def _run_all_tests(self, results: Dict[str, Any]) -> None:
         for idx, test_id in enumerate(self.tests_to_run):
             if test_id not in self.test_params:
                 benchmark_logger.warning(f"{_LOG_PREFIX} Test {test_id} not found. Skipping.")
@@ -287,11 +301,6 @@ class GeekbenchBenchmark:
             if idx < len(self.tests_to_run) - 1:
                 benchmark_logger.info(f"{_LOG_PREFIX} Cooling down for 10 seconds between tests...")
                 time.sleep(10)
-                
-        if hasattr(self, 'teardown') and callable(getattr(self, 'teardown')):
-            self.teardown(serial_executor, adb_manager)
-            
-        return results
 
     def teardown(self, serial_executor, adb_manager) -> None:
         teardown_telemetry(adb_manager, self.run_dir, self.telemetry_timestamp)

@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -263,6 +264,24 @@ class AdbManager:
         start_time = time.monotonic()
         last_log_time = start_time
 
+        # Drain stdout/stderr concurrently with the poll loop below. If we
+        # waited until the process exited (or timed out) before reading
+        # either pipe, a command that fills the OS pipe buffer on one
+        # stream (common for noisy stderr output) would block that stream
+        # forever since nothing is reading it, causing a false timeout/hang
+        # even though the process itself is still making progress.
+        stdout_chunks: List[bytes] = []
+        stderr_chunks: List[bytes] = []
+
+        def _drain(stream, sink: List[bytes]):
+            for chunk in iter(lambda: stream.read(4096), b""):
+                sink.append(chunk)
+
+        stdout_thread = threading.Thread(target=_drain, args=(process.stdout, stdout_chunks), daemon=True)
+        stderr_thread = threading.Thread(target=_drain, args=(process.stderr, stderr_chunks), daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
+
         while True:
             ret = process.poll()
             if ret is not None:
@@ -289,9 +308,10 @@ class AdbManager:
 
             time.sleep(0.5)
 
-        stdout_bytes, stderr_bytes = process.communicate()
-        stdout = stdout_bytes.decode("utf-8", errors="ignore")
-        stderr = stderr_bytes.decode("utf-8", errors="ignore")
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        stdout = b"".join(stdout_chunks).decode("utf-8", errors="ignore")
+        stderr = b"".join(stderr_chunks).decode("utf-8", errors="ignore")
 
         if process.returncode != 0:
             logger.warning(

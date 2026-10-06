@@ -18,8 +18,8 @@ if stability_valid == False:
 ```
 if throughput_delta_percent < -5.0:
     
-    Check `anomaly_summary.json` for page_fault_spike:
-    if page_fault_spike.count > 0:
+    Check `anomaly_summary.json` for swap_activity_spike:
+    if swap_activity_spike.count > 0:
         → DIAGNOSIS: Cache Misses / Memory Reclaim Pressure. The system is struggling to map pages or is actively reclaiming them.
         → RECOMMENDATION: Check dmesg for compaction or direct reclaim events. 
         

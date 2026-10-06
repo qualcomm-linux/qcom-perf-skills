@@ -31,10 +31,19 @@ def generate_chart_js_data(history_data: List[Dict[str, Any]]) -> str:
         build_id = meta.get("build_id", "Unknown")
         bench_name = meta.get("benchmark_name", "")
         stats = entry.get("statistics", {})
-        
+
+        # Only the benchmarks handled below contribute a data point to
+        # these specific datasets. Skipping unhandled benchmarks here (and
+        # NOT appending a label for them) keeps `labels` the same length as
+        # every `data` array - appending a label unconditionally while only
+        # some branches push to the data arrays desyncs the two, shifting
+        # every subsequent point on the chart.
+        if bench_name not in ("coremark", "sysbench", "tiobench", "geekbench"):
+            continue
+
         label = f"{build_id} ({bench_name})"
         labels.append(label)
-        
+
         # Coremark
         if bench_name == "coremark":
             score = stats.get("coremark_default", {}).get("mean", 0.0)
@@ -53,7 +62,7 @@ def generate_chart_js_data(history_data: List[Dict[str, Any]]) -> str:
             geekbench_multi_scores.append(0.0)
         # Tiobench
         elif bench_name == "tiobench":
-            score = stats.get("write_rate_4096", {}).get("mean", 0.0)
+            score = stats.get("sequential_write_rate", {}).get("mean", 0.0)
             tiobench_write_scores.append(score)
             coremark_scores.append(0.0)
             sysbench_cpu_scores.append(0.0)

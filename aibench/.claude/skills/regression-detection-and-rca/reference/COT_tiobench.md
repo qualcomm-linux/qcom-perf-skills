@@ -22,5 +22,5 @@ If random reads/writes regress:
 
 ### 3. Page Cache Thrashing
 TIOBench can sometimes stress the Linux page cache before hitting physical disk.
-- **Signature:** `vmstat.page_fault_spike` is extremely high (>100k/s) and `vmstat.free_memory_mb` drops near zero.
+- **Signature:** `vmstat.swap_activity_spike` is extremely high (>100k/s) and `vmstat.free_memory_mb` drops near zero.
 - **Cause:** The system is struggling to map file-backed memory. This indicates memory pressure interfering with I/O performance.

@@ -52,9 +52,9 @@ class TestRCADetector(unittest.TestCase):
         result = RCADetector.apply_cot_logic("tiobench_sequential", regression, anomalies)
         self.assertEqual(result["cause"], "I/O Bottleneck")
 
-    def test_page_fault_paging(self):
+    def test_swap_activity_paging(self):
         regression = _regression_result(tp_delta=-6.0)
-        anomalies = {"page_fault_spike": [{"sample": 1, "page_faults_per_sec": 200000}]}
+        anomalies = {"swap_activity_spike": [{"sample": 1, "swap_events_per_sec": 200000}]}
         result = RCADetector.apply_cot_logic("ramspeed_single", regression, anomalies)
         self.assertEqual(result["cause"], "Memory Pressure / Paging")
 

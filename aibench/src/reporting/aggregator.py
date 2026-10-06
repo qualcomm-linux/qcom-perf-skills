@@ -215,8 +215,16 @@ def update_global_build_history(output_dir: Path, analysis_payload: Dict[str, An
         try:
             with open(history_file, "r", encoding="utf-8") as f:
                 history_data = json.load(f)
-        except Exception:
-            history_data = []
+        except Exception as e:
+            # Do NOT silently reset to [] and overwrite below - that would
+            # permanently destroy all prior build history on a transient
+            # read/parse error. Log loudly and bail out, leaving the
+            # existing (unreadable but intact) file untouched.
+            phase_logger.error(
+                f"Failed to load existing build history from {history_file}: {e}. "
+                "Skipping history update to avoid overwriting existing data."
+            )
+            return
 
     # Replace entry if same build exists, otherwise append
     new_entry = analysis_payload

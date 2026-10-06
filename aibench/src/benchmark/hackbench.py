@@ -130,14 +130,17 @@ class Hackbench:
         Standard interface required by the harness.
         Returns the benchmark results dictionary.
         """
+        benchmark_logger.configure_run_dir(self.run_dir)
+        benchmark_logger.set_phase("setup")
         self.serial = serial_executor
         self.setup(serial_executor, adb_manager)
-        
+
+        benchmark_logger.set_phase("benchmark")
         metadata = {
             "benchmark": self.name,
             "timestamp_utc": time.strftime("%Y-%m-%d %H:%M:%S"),
             "os_build_id": adb_manager.get_build_id() if adb_manager else "unknown",
-            "os_pretty_name": getattr(adb_manager, "get_os_version", lambda: "Linux")() if adb_manager and hasattr(adb_manager, "get_os_version") else "Linux",
+            "os_pretty_name": adb_manager.get_pretty_name() if adb_manager and hasattr(adb_manager, "get_pretty_name") else "Linux",
             "total_iterations_executed": self.iterations * len(self.tests_to_run),
             "iterations_run": 0,
             "warmup_iterations_discarded": 0,
@@ -152,8 +155,10 @@ class Hackbench:
         try:
             self._run_all_tests(results)
         finally:
+            benchmark_logger.set_phase("teardown")
             self.teardown(serial_executor, adb_manager)
-            
+            benchmark_logger.end_phase()
+
         return results
 
     def teardown(self, serial_executor, adb_manager) -> None:

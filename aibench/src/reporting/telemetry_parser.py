@@ -31,7 +31,7 @@ _DEFAULT_THRESHOLDS: Dict[str, Any] = {
     "cpu_frequency": {"drop_threshold_percent": 20},
     "vmstat": {
         "context_switch_spike_per_sec": 50000,
-        "page_fault_spike_per_sec": 100000,
+        "swap_activity_spike_per_sec": 100000,
         "io_wait_spike_percent": 30,
         "free_memory_low_mb": 50,
     },
@@ -72,7 +72,7 @@ class TelemetryParser:
             "thermal_high_temp": [...],
             "oom_kills": [...],
             "context_switch_spike": [...],
-            "page_fault_spike": [...],
+            "swap_activity_spike": [...],
             "io_wait_spike": [...],
             "memory_pressure": [...],
             "process_cpu_anomalies": [...],
@@ -90,7 +90,7 @@ class TelemetryParser:
             "thermal_throttles": [],
             "oom_kills": [],
             "context_switch_spike": [],
-            "page_fault_spike": [],
+            "swap_activity_spike": [],
             "io_wait_spike": [],
             "thermal_high_temp": [],
             "memory_pressure": [],
@@ -124,7 +124,13 @@ class TelemetryParser:
 
         drop_pct_threshold = self._get_threshold("cpu_frequency", "drop_threshold_percent", default=20)
         cpufreq_log = cpufreq_logs[0]
-        baseline_freq = None
+        # Track a separate baseline per core rather than one global baseline.
+        # A single global baseline causes false positives on big.LITTLE
+        # SoCs, where the LITTLE cluster's cores run at an inherently lower
+        # frequency than the big/prime cluster's - comparing a LITTLE
+        # core's frequency against a big-cluster baseline (or vice versa)
+        # looks like a frequency drop even when nothing throttled.
+        baseline_freq_by_core: Dict[str, int] = {}
         current_time = "Unknown"
         with open(cpufreq_log, "r") as f:
             for line in f:
@@ -144,10 +150,12 @@ class TelemetryParser:
                         if freq_str.isdigit():
                             freq = int(freq_str)
 
+                            baseline_freq = baseline_freq_by_core.get(core)
                             if baseline_freq is None:
-                                baseline_freq = freq
+                                baseline_freq_by_core[core] = freq
+                                continue
 
-                            if baseline_freq and freq < baseline_freq * (1 - drop_pct_threshold / 100.0):
+                            if freq < baseline_freq * (1 - drop_pct_threshold / 100.0):
                                 drop_percent = ((baseline_freq - freq) / baseline_freq) * 100
                                 anomalies["cpu_frequency_drops"].append({
                                     "time": current_time,
@@ -225,7 +233,7 @@ class TelemetryParser:
                                 })
 
     # ------------------------------------------------------------------
-    # vmstat -- context switches, page faults, I/O wait, free memory
+    # vmstat -- context switches, swap activity, I/O wait, free memory
     # ------------------------------------------------------------------
     def _parse_vmstat(self, log_dir: Path, anomalies: Dict[str, List[Any]]) -> None:
         """
@@ -243,11 +251,11 @@ class TelemetryParser:
             [log_dir / "vmstat_metrics.log"] if (log_dir / "vmstat_metrics.log").exists() else []
         )
         if not vmstat_logs:
-            self.warnings.append("vmstat_metrics_*.log not found -- context-switch/page-fault/IO-wait/memory-pressure analysis skipped")
+            self.warnings.append("vmstat_metrics_*.log not found -- context-switch/swap-activity/IO-wait/memory-pressure analysis skipped")
             return
 
         cs_threshold = self._get_threshold("vmstat", "context_switch_spike_per_sec", default=50000)
-        pf_threshold = self._get_threshold("vmstat", "page_fault_spike_per_sec", default=100000)
+        swap_threshold = self._get_threshold("vmstat", "swap_activity_spike_per_sec", default=100000)
         wa_threshold = self._get_threshold("vmstat", "io_wait_spike_percent", default=30)
         free_low_threshold_kb = self._get_threshold("vmstat", "free_memory_low_mb", default=50) * 1024
 
@@ -267,8 +275,8 @@ class TelemetryParser:
 
                 try:
                     free_kb = int(cols[3])
-                    pf_in = int(cols[6])
-                    pf_out = int(cols[7])
+                    swap_in = int(cols[6])
+                    swap_out = int(cols[7])
                     cs = int(cols[11])
                     wa = int(cols[15])
                 except (ValueError, IndexError):
@@ -281,10 +289,10 @@ class TelemetryParser:
                         "sample": sample_idx, "context_switches_per_sec": cs
                     })
 
-                page_faults = pf_in + pf_out
-                if page_faults > pf_threshold:
-                    anomalies["page_fault_spike"].append({
-                        "sample": sample_idx, "page_faults_per_sec": page_faults
+                swap_activity = swap_in + swap_out
+                if swap_activity > swap_threshold:
+                    anomalies["swap_activity_spike"].append({
+                        "sample": sample_idx, "swap_events_per_sec": swap_activity
                     })
 
                 if wa > wa_threshold:

@@ -43,7 +43,7 @@ class GLMark2Benchmark(BenchmarkBase):
                 "benchmark": "glmark2",
                 "timestamp_utc": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "os_build_id": adb_manager.get_build_id() if adb_manager else "unknown",
-                "os_pretty_name": getattr(adb_manager, "get_os_version", lambda: "Linux")() if adb_manager and hasattr(adb_manager, "get_os_version") else "Linux",
+                "os_pretty_name": adb_manager.get_pretty_name() if adb_manager and hasattr(adb_manager, "get_pretty_name") else "Linux",
                 "iterations_run": self.iterations
             },
             "system_info": {},

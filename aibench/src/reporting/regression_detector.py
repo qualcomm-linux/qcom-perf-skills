@@ -292,13 +292,23 @@ class RegressionDetector:
         current_tp = current_metrics.get("throughput", [])
         
         is_precalculated = False
-        if "mean" in baseline_metrics and "mean" in current_metrics and (not baseline_tp or not current_tp):
+        if not baseline_tp and not current_tp and "mean" in baseline_metrics and "mean" in current_metrics:
             is_precalculated = True
             baseline_mean = baseline_metrics.get("mean", 0.0)
             current_mean = current_metrics.get("mean", 0.0)
             baseline_std = baseline_metrics.get("stddev", 0.0)
             current_std = current_metrics.get("stddev", 0.0)
         else:
+            # If exactly one side lacks raw throughput samples but does
+            # provide a precalculated mean, treat that mean as a single-
+            # sample series rather than forcing BOTH sides down to the
+            # bare mean/stddev comparison above - that would throw away
+            # the full distribution on the side that DOES have raw data.
+            if not baseline_tp and "mean" in baseline_metrics:
+                baseline_tp = [baseline_metrics["mean"]]
+            if not current_tp and "mean" in current_metrics:
+                current_tp = [current_metrics["mean"]]
+
             if not baseline_tp or not current_tp:
                 result["anomalies"].append("Missing throughput data for comparison.")
                 return result

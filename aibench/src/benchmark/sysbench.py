@@ -173,6 +173,11 @@ class SysbenchBenchmark(BenchmarkBase):
         for k, v in merged_params.items():
             if v == "true" or v is True:
                 arg_strings.append(k)
+            elif v == "false" or v is False:
+                # Boolean-off flags are omitted entirely rather than
+                # serialized as "k=False"/"k=false", which sysbench would
+                # otherwise receive as a literal (and invalid) argument.
+                continue
             else:
                 arg_strings.append(f"{k}={v}")
 

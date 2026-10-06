@@ -20,7 +20,7 @@ The `telemetry_data` payload will look like this:
   ],
   "vmstat_anomalies": {
     "context_switches": 75000, 
-    "page_faults": 1500,
+    "swap_activity": 1500,
     "io_wait_percent": 12.5,
     "free_memory_mb": 120
   },
@@ -53,7 +53,7 @@ The `telemetry_data` payload will look like this:
 
 ### 3. Virtual Memory Stats (`vmstat_anomalies`)
 - **Context Switches (`context_switches`):** Normal baseline is ~10k-20k/sec. Spikes >50k/sec indicate heavy thread contention. Very relevant for `sysbench_threads` and `osbench`.
-- **Page Faults (`page_faults`):** Spikes >100k/sec indicate memory thrashing. The system is struggling to allocate RAM and is paging out to disk.
+- **Swap Activity (`swap_activity`):** Spikes >100k/sec (si+so) indicate memory thrashing. The system is struggling to allocate RAM and is paging out to disk.
 - **I/O Wait (`io_wait_percent`):** The percentage of time the CPU spent idle waiting for disk I/O. >30% is a severe bottleneck. Normal for `tiobench`/`fileio`, but abnormal for `coremark` (CPU).
 - **Free Memory (`free_memory_mb`):** <50MB is critically low. Look for `oom_kills`.
 

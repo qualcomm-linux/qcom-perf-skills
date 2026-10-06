@@ -252,7 +252,17 @@ class ExcelGenerator:
                     continue
 
                 if target_row in written_rows:
-                    # Already written a value for this row — skip to avoid overwrite
+                    # Two metric keys mapped to the same template row - the
+                    # second one's data is dropped (writing it would
+                    # overwrite the first). Surface this with a warning
+                    # instead of only a code comment, since it otherwise
+                    # silently discards real benchmark data (e.g. sysbench
+                    # multi-core CPU results) with zero visibility.
+                    logger.warning(
+                        f"[ExcelGenerator] benchmark='{bench_name}' metric='{metric_key}' "
+                        f"maps to the same template row ('{sub_test_text}') as a previously "
+                        f"written metric — this metric's data will NOT appear in the report."
+                    )
                     continue
                 written_rows.add(target_row)
 
