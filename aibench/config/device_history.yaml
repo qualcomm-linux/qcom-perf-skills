@@ -1,0 +1,8 @@
+devices:
+- ip_address: 10.92.197.120
+  device_model: qualcomm linux reference distro
+  build_id: 36811664911-1
+  os_pretty_name: Qualcomm Linux Reference Distro 2.1
+  kernel: 6.18.44-g8d0ad3756ce7-dirty
+  added_timestamp: '2026-10-05T11:41:09.578610'
+  last_used: '2026-10-05T11:41:09.578610'

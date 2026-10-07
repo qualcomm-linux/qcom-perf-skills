@@ -1,0 +1,11 @@
+{
+  "disabledMcpjsonServers": [
+    "qgenie-chat"
+  ],
+  "skillOverrides": {},
+  "permissions": {
+    "allow": [
+      "Bash(python -u -)"
+    ]
+  }
+}

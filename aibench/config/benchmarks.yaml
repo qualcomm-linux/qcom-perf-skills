@@ -1,0 +1,567 @@
+# Configures the active benchmarks and hardware parameters
+#
+# IMPORTANT: Understanding `iterations` (this file) vs `-r`/`--runs` (CLI-only):
+# - `iterations` (below, per-benchmark): the INNER loop. Controls how many times
+#   each individual sub-test repeats WITHIN a single suite run. This is the
+#   default value used unless overridden via the `--iterations` CLI flag.
+#   Implemented inside each src/benchmark/<name>.py engine.
+# - `-r` / `--runs` (CLI-only, NOT stored in this file): the OUTER loop.
+#   Controls how many times the ENTIRE benchmark suite (one full
+#   execute_lifecycle() call) is executed. Implemented in main.py. Defaults to
+#   1 (a single suite run) if not passed on the command line.
+#
+# Total sub-test executions = runs (-r) x iterations (this file's value, or the
+# --iterations CLI override). Example: `-r 3 --iterations 4` on sysbench's
+# fileio test = 3 suite runs x 4 iterations per run = 12 total executions.
+# See aibench/documentation/BenchmarkPrompts.md and aibench/FAQ.md
+# (Section 2) for the full explanation and worked examples.
+port: COM7
+baud: 115200
+bypass_gap: false
+
+# --------------------------------------------------------------------------
+# telemetry_thresholds - Device/SoC-specific thresholds used by the
+# regression-detection-and-rca skill (see aibench/.claude/skills/
+# regression-detection-and-rca/) for anomaly detection and root-cause
+# analysis. Each top-level key under `devices:` is a device codename that
+# can be selected via `active_device` below or overridden per-invocation.
+#
+# PHASE 1 NOTE: These are generic, conservative starting values for the
+# IQ-9075 (codename "Lemans") target. They are NOT final/validated
+# hardware-characterized limits -- they will be tuned with real
+# measurement data in a later phase. Treat them as reasonable defaults
+# for a first, generic threshold-based RCA implementation.
+# --------------------------------------------------------------------------
+active_device: IQ-9075
+
+telemetry_thresholds:
+  devices:
+    IQ-9075:
+      codename: "Lemans"
+      thermal:
+        # Zone-type substring match against thermal_metrics_*.csv column 3
+        # (see start_telemetry_device.sh's ZONE_TYPE cases: cpu-*-thermal,
+        # cpuss-*-thermal, ddrss-*-thermal).
+        cpu_high_temp_c: 85
+        ddr_high_temp_c: 75
+        cpu_throttle_temp_c: 95
+      cpu_frequency:
+        # A cpufreq reading below (baseline * (1 - drop_threshold_percent/100))
+        # for any core is flagged as a frequency-drop anomaly.
+        drop_threshold_percent: 20
+      regression:
+        # Mirrors src/reporting/regression_detector.py's historical defaults;
+        # now sourced from here instead of being hardcoded in Python.
+        throughput_threshold_percent: -5
+        latency_threshold_percent: 10
+        latency_absolute_warn_ms: 500
+        latency_absolute_fail_ms: 2000
+        stability_gate_cv_percent: 10
+        error_margin_threshold_percent: 0.2
+        categories:
+          CPU:
+            threshold_percent: -3
+          Memory:
+            threshold_percent: -3
+          GPU:
+            threshold_percent: -5
+          OS:
+            threshold_percent: -5
+          Storage:
+            threshold_percent: -7
+      vmstat:
+        # Per-second rates; a sample exceeding these is flagged as a spike.
+        context_switch_spike_per_sec: 50000
+        swap_activity_spike_per_sec: 100000
+        io_wait_spike_percent: 30
+        free_memory_low_mb: 50  # 50 MB free considered critically low
+      top:
+        # Per-process CPU% considered dominant/anomalous for a single process
+        single_process_cpu_percent_high: 90
+        # RSS growth between first and last `top` sample considered a
+        # possible leak (percentage growth).
+        rss_growth_leak_percent: 50
+      ftrace:
+        # sched_wakeup -> sched_switch latency (microseconds) considered a
+        # scheduler-latency anomaly.
+        sched_wakeup_latency_us_high: 5000
+        # Number of sched_migrate_task events within a single run considered
+        # excessive task migration (possible load-balancing thrash).
+        migration_count_high: 500
+      memory:
+        # Any OOM kill event in dmesg is treated as critical (threshold of 1).
+        oom_kill_threshold: 1
+
+active_benchmarks:
+  - coremark
+  - sysbench
+  - tiobench
+  - hackbench
+  - glmark2
+  - coremark_pro
+  - osbench
+  - ramspeed
+  - unixbench
+  - bw_mem
+  - lat_mem_rd
+  - geekbench
+
+benchmarks:
+  lat_mem_rd:
+    command: /usr/bin/lat_mem_rd
+    iterations: 3
+    category: Memory
+    metric_direction: lower
+    # Fixed CLI flags passed on every invocation (order preserved).
+    # "" as a value means the key is a flag with no value (e.g. -t).
+    common_params:
+      -t: ""
+      -N: 7
+    # Stride value (bytes) - last positional argument to lat_mem_rd.
+    stride: 64
+    # Working-set sizes swept per iteration, in increasing order.
+    # Each size is run as its own command invocation:
+    #   lat_mem_rd -t -N 7 <size> <stride>
+    workload_sizes:
+      - 64M
+      - 96M
+      - 128M
+      - 192M
+      - 256M
+    # Delay (seconds) between consecutive workload-size command invocations within an iteration.
+    inter_command_delay: 5
+    # Cooldown (seconds) between iterations.
+    inter_iteration_delay: 5
+    # Number of retries for a single workload-size command if execution/parsing fails.
+    retry_attempts: 3
+    # Plateau validity thresholds (see AddNewBenchmark.md / lat_mem_rd algorithm).
+    plateau_thresholds:
+      min_points: 4
+      max_spread_pct: 3.0
+      max_adjacent_change_pct: 2.0
+    tests:
+      - lat_mem_rd_default
+
+  bw_mem:
+    iterations: 1
+    category: Memory
+    metric_direction: higher
+    memory_size: 2G
+    worker_start: 1
+    worker_end: $(nproc)
+    plateau_thresholds:
+      consecutive_gain_pct: 5.0
+      overall_gain_pct: 2.0
+      collapse_threshold_pct: 20.0
+      regression_tolerance_pct: 3.0
+      plateau_spread_pct: 5.0
+      min_plateau_points: 3
+    operations:
+      - rd
+      - wr
+      - cp
+      - rdwr
+      - frd
+      - fwr
+    tests:
+      - bw_mem_rd
+      - bw_mem_wr
+      - bw_mem_cp
+      - bw_mem_rdwr
+      - bw_mem_frd
+      - bw_mem_fwr
+
+  ramspeed:
+    iterations: 3
+    category: Memory
+    metric_direction: higher
+    common_params:
+      -m: 32
+      -g: 8
+      -r: ""
+    benchmark_ids:
+      1: intmark_writing
+      2: intmark_reading
+      3: integer_average
+      4: floatmark_writing
+      5: floatmark_reading
+      6: float_average
+    tests:
+      - ramspeed_single
+      - ramspeed_multi
+
+  unixbench:
+    iterations: 1
+    category: OS
+    metric_direction: higher
+    description: "BYTE UNIX Benchmarks - OS/Kernel/Scheduler performance"
+
+  osbench:
+    iterations: 3
+    category: OS
+    metric_direction: lower
+    microbenchmarks:
+      launch_programs: 
+      create_files: /root/
+      create_processes: 
+      create_threads: 
+    tests:
+      - osbench_default
+
+  coremark_pro:
+    command: /usr/bin/core
+    iterations: 3
+    category: CPU
+    metric_direction: higher
+    microbenchmarks:
+      core: 100
+      cjpeg-rose7-preset: 100
+      linear_alg-mid-100x100-sp: 100
+      loops-all-mid-10k-sp: 100
+      nnet_test: 100
+      parser-125k: 100
+      radix2-big-64k: 1000
+      sha-test: 100
+      zip-test: 100
+    tests:
+      - coremark_pro_single
+      - coremark_pro_multi
+
+  glmark2:
+    category: GPU
+    metric_direction: higher
+    test_params:
+      glmark2_default:
+        command: XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=/run/wayland-0 /usr/bin/glmark2-es2-wayland
+        config_file: src/configs/benchmarks_glmark2.txt
+      glmark2_1920x1080:
+        command: XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=/run/wayland-0 /usr/bin/glmark2-es2-wayland
+        size: "1920x1080"
+        config_file: src/configs/benchmarks_glmark2_1920x1080.txt
+      glmark2_offscreen:
+        command: XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=/run/wayland-0 /usr/bin/glmark2-es2-wayland
+        offscreen: true
+        config_file: src/configs/benchmarks_glmark2_offscreen.txt
+      glmark2_offscreen_1920x1080:
+        command: XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=/run/wayland-0 /usr/bin/glmark2-es2-wayland
+        size: "1920x1080"
+        offscreen: true
+        config_file: src/configs/benchmarks_glmark2_offscreen_1920_1080.txt
+    tests:
+      - glmark2_default
+      - glmark2_1920x1080
+      - glmark2_offscreen
+      - glmark2_offscreen_1920x1080
+
+  coremark:
+    command: /usr/bin/coremark
+    iterations: 3
+    category: CPU
+    metric_direction: higher
+    test_params:
+      coremark_default:
+        category: performance
+    tests:
+      - coremark_default
+    
+  sysbench:
+    command: /usr/bin/sysbench
+    fileio_dir: /root/sysbench_io
+    category: System
+    metric_direction: mixed
+    metric_config:
+      sysbench_cpu_prime_single_test: higher
+      sysbench_cpu_prime_multi_test: higher
+      sysbench_memory_seq_read_test_operations_per_sec: higher
+      sysbench_memory_seq_write_test_operations_per_sec: higher
+      sysbench_memory_random_read_operations_per_sec: higher
+      sysbench_memory_random_write_operations_per_sec: higher
+      sysbench_threads_scheduler_test: higher
+      # events/sec (more completed lock/unlock ops per second = better) -
+      # was previously (incorrectly) marked "lower"; this metric now newly
+      # gets consulted now that direction resolution is wired up, so the
+      # stale value must match reality to avoid flipping a real
+      # regression into a false negative (or vice versa).
+      sysbench_mutex_contention_test: higher
+      sysbench_fileio_seq_write_test_write_mib_sec: higher
+      sysbench_fileio_seq_read_test_read_mib_sec: higher
+      sysbench_fileio_random_write_test_write_mib_sec: higher
+      sysbench_fileio_random_read_test_read_mib_sec: higher
+      sysbench_fileio_random_mixed_test_read_mib_sec: higher
+      sysbench_fileio_random_mixed_test_write_mib_sec: higher
+      # Per-submetric direction overrides for the generic latency/fairness
+      # fields metrics_extractor.py emits for every sysbench test (lower is
+      # better for all of these - regression = an INCREASE, not a decrease).
+      sysbench_cpu_prime_single_test_latency_95: lower
+      sysbench_cpu_prime_single_test_latency_avg: lower
+      sysbench_cpu_prime_single_test_latency_min: lower
+      sysbench_cpu_prime_single_test_latency_max: lower
+      sysbench_cpu_prime_single_test_event_fairness_stddev: lower
+      sysbench_cpu_prime_single_test_execution_time_fairness_stddev: lower
+      sysbench_cpu_prime_multi_test_latency_95: lower
+      sysbench_cpu_prime_multi_test_latency_avg: lower
+      sysbench_cpu_prime_multi_test_latency_min: lower
+      sysbench_cpu_prime_multi_test_latency_max: lower
+      sysbench_cpu_prime_multi_test_event_fairness_stddev: lower
+      sysbench_cpu_prime_multi_test_execution_time_fairness_stddev: lower
+      sysbench_memory_seq_read_test_latency_95: lower
+      sysbench_memory_seq_read_test_latency_avg: lower
+      sysbench_memory_seq_read_test_latency_min: lower
+      sysbench_memory_seq_read_test_latency_max: lower
+      sysbench_memory_seq_read_test_event_fairness_stddev: lower
+      sysbench_memory_seq_read_test_execution_time_fairness_stddev: lower
+      sysbench_memory_seq_write_test_latency_95: lower
+      sysbench_memory_seq_write_test_latency_avg: lower
+      sysbench_memory_seq_write_test_latency_min: lower
+      sysbench_memory_seq_write_test_latency_max: lower
+      sysbench_memory_seq_write_test_event_fairness_stddev: lower
+      sysbench_memory_seq_write_test_execution_time_fairness_stddev: lower
+      sysbench_memory_random_read_latency_95: lower
+      sysbench_memory_random_read_latency_avg: lower
+      sysbench_memory_random_read_latency_min: lower
+      sysbench_memory_random_read_latency_max: lower
+      sysbench_memory_random_read_event_fairness_stddev: lower
+      sysbench_memory_random_read_execution_time_fairness_stddev: lower
+      sysbench_memory_random_write_latency_95: lower
+      sysbench_memory_random_write_latency_avg: lower
+      sysbench_memory_random_write_latency_min: lower
+      sysbench_memory_random_write_latency_max: lower
+      sysbench_memory_random_write_event_fairness_stddev: lower
+      sysbench_memory_random_write_execution_time_fairness_stddev: lower
+      sysbench_threads_scheduler_test_latency_95: lower
+      sysbench_threads_scheduler_test_latency_avg: lower
+      sysbench_threads_scheduler_test_latency_min: lower
+      sysbench_threads_scheduler_test_latency_max: lower
+      sysbench_threads_scheduler_test_event_fairness_stddev: lower
+      sysbench_threads_scheduler_test_execution_time_fairness_stddev: lower
+      sysbench_mutex_contention_test_latency_95: lower
+      sysbench_mutex_contention_test_latency_avg: lower
+      sysbench_mutex_contention_test_latency_min: lower
+      sysbench_mutex_contention_test_latency_max: lower
+      sysbench_mutex_contention_test_event_fairness_stddev: lower
+      sysbench_mutex_contention_test_execution_time_fairness_stddev: lower
+      sysbench_fileio_seq_read_test_latency_95: lower
+      sysbench_fileio_seq_read_test_latency_avg: lower
+      sysbench_fileio_seq_read_test_latency_min: lower
+      sysbench_fileio_seq_read_test_latency_max: lower
+      sysbench_fileio_seq_read_test_event_fairness_stddev: lower
+      sysbench_fileio_seq_read_test_execution_time_fairness_stddev: lower
+      sysbench_fileio_random_read_test_latency_95: lower
+      sysbench_fileio_random_read_test_latency_avg: lower
+      sysbench_fileio_random_read_test_latency_min: lower
+      sysbench_fileio_random_read_test_latency_max: lower
+      sysbench_fileio_random_read_test_event_fairness_stddev: lower
+      sysbench_fileio_random_read_test_execution_time_fairness_stddev: lower
+      sysbench_fileio_random_write_test_latency_95: lower
+      sysbench_fileio_random_write_test_latency_avg: lower
+      sysbench_fileio_random_write_test_latency_min: lower
+      sysbench_fileio_random_write_test_latency_max: lower
+      sysbench_fileio_random_write_test_event_fairness_stddev: lower
+      sysbench_fileio_random_write_test_execution_time_fairness_stddev: lower
+      sysbench_fileio_random_mixed_test_latency_95: lower
+      sysbench_fileio_random_mixed_test_latency_avg: lower
+      sysbench_fileio_random_mixed_test_latency_min: lower
+      sysbench_fileio_random_mixed_test_latency_max: lower
+      sysbench_fileio_random_mixed_test_event_fairness_stddev: lower
+      sysbench_fileio_random_mixed_test_execution_time_fairness_stddev: lower
+      sysbench_fileio_seq_write_test_latency_95: lower
+      sysbench_fileio_seq_write_test_latency_avg: lower
+      sysbench_fileio_seq_write_test_latency_min: lower
+      sysbench_fileio_seq_write_test_latency_max: lower
+      sysbench_fileio_seq_write_test_event_fairness_stddev: lower
+      sysbench_fileio_seq_write_test_execution_time_fairness_stddev: lower
+      # execution_time_fairness_avg is a per-thread AVERAGE EXECUTION TIME
+      # (seconds) - lower is better, same as latency. Note: the sibling
+      # event_fairness_avg field is an average EVENT COUNT per thread, where
+      # higher is better, so it intentionally has no override here.
+      sysbench_cpu_prime_single_test_execution_time_fairness_avg: lower
+      sysbench_cpu_prime_multi_test_execution_time_fairness_avg: lower
+      sysbench_memory_seq_read_test_execution_time_fairness_avg: lower
+      sysbench_memory_seq_write_test_execution_time_fairness_avg: lower
+      sysbench_memory_random_read_execution_time_fairness_avg: lower
+      sysbench_memory_random_write_execution_time_fairness_avg: lower
+      sysbench_threads_scheduler_test_execution_time_fairness_avg: lower
+      sysbench_mutex_contention_test_execution_time_fairness_avg: lower
+      sysbench_fileio_seq_read_test_execution_time_fairness_avg: lower
+      sysbench_fileio_random_read_test_execution_time_fairness_avg: lower
+      sysbench_fileio_random_write_test_execution_time_fairness_avg: lower
+      sysbench_fileio_random_mixed_test_execution_time_fairness_avg: lower
+      sysbench_fileio_seq_write_test_execution_time_fairness_avg: lower
+    iterations: 3
+    test_params:
+      sysbench_cpu_prime_single_test:
+        category: cpu
+        --cpu-max-prime: 20000
+        --threads: 1
+        --time: 30
+      sysbench_cpu_prime_multi_test:
+        category: cpu
+        --cpu-max-prime: 20000
+        --threads: $(nproc)
+        --time: 30
+      sysbench_memory_seq_read_test:
+        category: memory
+        --threads: 1
+        --memory-block-size: 8K
+        --memory-total-size: 1G
+        --memory-access-mode: seq
+        --memory-oper: read
+      sysbench_memory_seq_write_test:
+        category: memory
+        --threads: 1
+        --memory-block-size: 8K
+        --memory-total-size: 1G
+        --memory-access-mode: seq
+        --memory-oper: write
+      sysbench_memory_random_read:
+        category: memory
+        --threads: $(nproc)
+        --memory-block-size: 4K
+        --memory-oper: read
+        --memory-access-mode: rnd
+      sysbench_memory_random_write:
+        category: memory
+        --threads: $(nproc)
+        --memory-block-size: 4K
+        --memory-oper: write
+        --memory-access-mode: rnd
+      sysbench_threads_scheduler_test:
+        category: threads
+        --threads: $(nproc)
+        --thread-yields: 1000
+        --thread-locks: 8
+      sysbench_mutex_contention_test:
+        category: mutex
+        --threads: $(nproc)
+        --mutex-num: 10000
+        --mutex-locks: 100000
+        --mutex-loops: 10000
+      sysbench_fileio_prepare:
+        category: fileio
+        --file-total-size: 8G
+        --file-num: 16
+      sysbench_fileio_cleanup:
+        category: fileio
+        --file-total-size: 8G
+      sysbench_fileio_seq_write_test:
+        category: fileio
+        --file-num: 16
+        --file-total-size: 8G
+        --file-test-mode: seqwr
+        --threads: $(nproc)
+      sysbench_fileio_seq_read_test:
+        category: fileio
+        --file-num: 16
+        --file-total-size: 8G
+        --file-test-mode: seqrd
+        --threads: $(nproc)
+      sysbench_fileio_random_write_test:
+        category: fileio
+        --file-num: 16
+        --file-total-size: 8G
+        --file-test-mode: rndwr
+        --threads: $(nproc)
+      sysbench_fileio_random_read_test:
+        category: fileio
+        --file-num: 16
+        --file-total-size: 8G
+        --file-test-mode: rndrd
+        --threads: $(nproc)
+      sysbench_fileio_random_mixed_test:
+        category: fileio
+        --file-num: 16
+        --file-total-size: 8G
+        --file-test-mode: rndrw
+        --threads: $(nproc)
+        --time: 60
+    tests:
+      - sysbench_cpu_prime_single_test
+      - sysbench_cpu_prime_multi_test
+      - sysbench_memory_seq_read_test
+      - sysbench_memory_seq_write_test
+      - sysbench_memory_random_read
+      - sysbench_memory_random_write
+      - sysbench_threads_scheduler_test
+      - sysbench_mutex_contention_test
+      - sysbench_fileio_seq_read_test
+      - sysbench_fileio_random_read_test
+      - sysbench_fileio_random_write_test
+      - sysbench_fileio_random_mixed_test
+      - sysbench_fileio_seq_write_test
+      
+  tiobench:
+    iterations: 3
+    command: /usr/bin/tiotest
+    category: Storage
+    metric_direction: higher
+    test_params:
+        sequential:
+          -t: 8
+          -d: /opt/
+          -f: 256
+          -b: 4096
+          -k: 1,3
+        random:      
+          -t: 8
+          -d: /opt/
+          -f: 256
+          -b: 4096
+          -k: 0,2
+        mixed:
+          -t: 8
+          -d: /opt/
+          -f: 256
+          -b: 4096
+    # List of test types to run by default. Also used by main.py to validate
+    # any user-supplied -t/--tests overrides (e.g. `-t sequential`).
+    tests:
+      - sequential
+      - random
+      - mixed
+      
+  hackbench:
+    command: /usr/bin/hackbench
+    iterations: 3
+    category: CPU
+    metric_direction: lower
+    test_params:
+      sched_ipc_default:
+        category: scheduler_ipc_default_test
+        -p: ""
+        -T: ""
+        -g: 4
+        -f: 8
+        -l: 150000
+        -s: 100
+      sched_ipc_heavy:
+        category: scheduler_ipc_default_test
+        -p: ""
+        -T: ""
+        -g: 4
+        -f: 8
+        -l: 250000
+        -s: 100
+      sched_ipc_sockets_extreme:
+        category: scheduler_ipc_default_test
+        -T: ""
+        -g: 16
+        -f: 8
+        -l: 150000
+        -s: 256
+    tests:
+      - sched_ipc_default
+      - sched_ipc_heavy
+      - sched_ipc_sockets_extreme
+
+  geekbench:
+    command: /root/geekbench6
+    iterations: 3
+    category: CPU
+    metric_direction: higher
+    test_params:
+      geekbench_cpu:
+        category: cpu_benchmark
+        --no-upload: ""
+        --cpu: ""
+    tests:
+      - geekbench_cpu

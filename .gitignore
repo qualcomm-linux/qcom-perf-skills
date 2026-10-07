@@ -1,0 +1,7 @@
+aibench/logging/
+aibench/output/
+*.log
+*.pyc
+*.swp
+*.o
+
