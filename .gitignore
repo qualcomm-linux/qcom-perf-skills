@@ -1,5 +1,5 @@
-aibench/logging/
-aibench/output/
+benchmarks/logging/
+benchmarks/output/
 *.log
 *.pyc
 *.swp
