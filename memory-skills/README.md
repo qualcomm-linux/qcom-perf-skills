@@ -183,6 +183,32 @@ Tell the agent: "use SSH, device at 192.168.1.100, user=root"
 ```
 The agent will prompt for hostname, username, and password.
 
+#### Sudo / Privilege Escalation (non-root SSH users)
+
+If the SSH user is not root, some restricted sources (`/proc/slabinfo`,
+debugfs entries under `/sys/kernel/debug/...`, etc.) require elevated
+privileges to read. The skill handles this automatically:
+
+- By default, the SSH login password (`--password`) is **reused as the sudo
+  password** and commands are escalated non-interactively via `sudo -S`.
+- To use a different sudo password, pass `--sudo-password <password>`.
+- To disable automatic password reuse (e.g. if the account has a `NOPASSWD`
+  sudoers rule and no sudo password is needed), pass `--no-sudo-reuse`.
+
+```bash
+# Default: reuse SSH login password as sudo password
+python skills/memory-analysis/scripts/run.py --host 192.168.1.100 --user qcom --password qcom
+
+# Explicit sudo password (different from login password)
+python skills/memory-analysis/scripts/run.py --host 192.168.1.100 --user qcom --password qcom --sudo-password mysudopass
+
+# Passwordless sudo (NOPASSWD sudoers rule configured on device)
+python skills/memory-analysis/scripts/run.py --host 192.168.1.100 --user qcom --password qcom --no-sudo-reuse
+```
+
+This also applies to ADB transport when the shell user is non-root and `su`
+is unavailable — `sudo -S`/`sudo -n` is attempted as a fallback.
+
 ### What the AI agent will ask you
 
 If information is missing, the agent will ask:

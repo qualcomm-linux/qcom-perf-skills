@@ -184,6 +184,47 @@ Or use SSH as root user.
 
 ---
 
+### Report shows `0 MB` for DMA-BUF or KGSL, but the device has data
+
+**Symptom:** The HTML report's "Hardware / Driver Buffers" row (and its DMA-BUF / KGSL
+sub-rows) display `0` even though the raw snapshot shows a non-zero value.
+
+**Cause 1 — Genuinely zero:** If `dmabuf_bufinfo.txt` / `kgsl_alloc.txt` show `0 bytes`
+or `Total 0 objects, 0 bytes`, there is truly no active DMA-BUF/KGSL allocation at
+snapshot time (e.g. no camera/display/video/GPU workload was running). This is correct
+and expected on an idle device.
+
+**Cause 2 — Sub-MB rounding in the report template:** The summary table in
+`internal/report-generation/scripts/generate_report.py` formats most rows with the
+`mb()` helper, which rounds to the nearest whole MB:
+```python
+def mb(kb):
+    return f"{kb/1024:.0f}" if kb else "0"
+```
+A value like `224 KB` (≈ `0.21 MB`) rounds down to `"0"` and displays as zero even
+though it is non-zero. This mainly affects **KGSL** (often allocated in small KB
+amounts when idle) and the DMA-BUF per-exporter size-group rows (which already use
+the more precise `mb_precise()` helper and are not affected).
+
+**How to verify the real value:**
+```python
+import json
+snap = json.load(open("results/<snapshot_dir>/snapshot/snapshot.json"))
+dbg = snap["sources"]["debugfs"]
+print("dmabuf_kb:", dbg["dmabuf"]["parsed"]["total_kb"])
+print("kgsl_kb:",   dbg["kgsl"]["parsed"]["total_kb"])
+```
+Or inspect the intermediate comparison report at
+`results/<snapshot_dir>/reports/_intermediate/snapshot_comparison_report.json`
+under `summary_table.current.hw_driver_breakdown`.
+
+**Impact:** Cosmetic only — underlying memory accounting totals (`hw_driver_kb`,
+category deltas, etc.) are computed from the precise KB values and are correct;
+only the whole-MB display in the top-level summary table rows can hide small
+non-zero values.
+
+---
+
 ### `smaps: procrank.txt not available for smaps selection`
 
 **Symptom:** smaps data missing from snapshot.
