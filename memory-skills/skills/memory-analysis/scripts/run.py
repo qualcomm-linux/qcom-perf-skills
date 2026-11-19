@@ -184,6 +184,15 @@ def collect_cmd(args, out_dir: Path, label: str) -> list:
         cmd += ["--host", args.host, "--user", args.user]
         if getattr(args, "password", None):
             cmd += ["--password", args.password]
+    # Sudo privilege escalation for permission-restricted sources
+    # (e.g. /proc/slabinfo, debugfs entries) when the connected user is
+    # non-root. If --sudo-password is not explicitly given, collect.py
+    # will automatically reuse --password as the sudo password for SSH
+    # transport, unless --no-sudo-reuse is set.
+    if getattr(args, "sudo_password", None):
+        cmd += ["--sudo-password", args.sudo_password]
+    if getattr(args, "no_sudo_reuse", False):
+        cmd += ["--no-sudo-reuse"]
     return cmd
 
 
@@ -1001,6 +1010,19 @@ def main() -> int:
     parser.add_argument(
         "--password", default=None,
         help="SSH password (if not provided, prompted interactively)"
+    )
+    parser.add_argument(
+        "--sudo-password", default=None,
+        help=(
+            "Password to use for 'sudo -S' when reading permission-restricted "
+            "memory sources (e.g. /proc/slabinfo, debugfs entries) as a "
+            "non-root user. If omitted, --password is reused automatically "
+            "for SSH transport unless --no-sudo-reuse is set."
+        )
+    )
+    parser.add_argument(
+        "--no-sudo-reuse", action="store_true",
+        help="Do not reuse --password as the sudo password for elevated reads."
     )
 
     # --- Output parameters (all modes) ---

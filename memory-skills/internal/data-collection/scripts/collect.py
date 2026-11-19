@@ -24,6 +24,16 @@ Usage (interactive — no args):
 Offline (no device):
     python collect.py --no-pull --output <dir> [--label <label>]
 
+Sudo / elevated-permission sources:
+  Several memory diagnostic files (e.g. /proc/slabinfo, debugfs entries) are
+  only readable by root on many Qualcomm Linux builds. When the connected
+  user is non-root, the collector automatically retries these reads with
+  'sudo'. To support non-interactive sudo (no NOPASSWD rule configured),
+  provide the sudo password with --sudo-password. If omitted, and the
+  transport is SSH with --password set, the SSH login password is reused
+  as the sudo password automatically. Pass --no-sudo-reuse to disable this
+  automatic reuse.
+
 Transport selection:
   --host   → SSH (password prompted interactively if no --key)
   --serial → ADB with specified serial
@@ -36,6 +46,7 @@ import getpass
 import json
 import os
 import re
+import shlex
 import struct
 import subprocess
 import sys
@@ -49,10 +60,32 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 class Transport:
-    """Abstract device transport. Subclasses implement shell() and pull()."""
+    """
+    Abstract device transport. Subclasses implement shell() and pull().
+
+    Sudo support:
+      self.sudo_password -- if set, elevated commands use 'sudo -S' with this
+                             password piped over stdin (never passed as a
+                             command-line argument, so it won't appear in
+                             process listings on the device).
+      If sudo_password is None, elevated commands fall back to non-interactive
+      'sudo -n' (works only if the device has a NOPASSWD sudoers rule).
+    """
+
+    def __init__(self):
+        self.sudo_password: str | None = None
 
     def shell(self, cmd: str) -> tuple[int, str]:
         """Run a shell command on the device. Returns (returncode, stdout)."""
+        raise NotImplementedError
+
+    def shell_sudo(self, cmd: str) -> tuple[int, str]:
+        """
+        Run a shell command on the device with sudo privilege.
+        If self.sudo_password is set, it is supplied non-interactively via
+        stdin ('sudo -S'). Otherwise falls back to passwordless 'sudo -n'.
+        Returns (returncode, stdout).
+        """
         raise NotImplementedError
 
     def pull(self, remote: str, local: str) -> bool:
@@ -77,6 +110,34 @@ class Transport:
                 ok = True
         return ok
 
+    def pull_dir_sudo(self, remote_dir: str, local_dir: str) -> bool:
+        """
+        Best-effort recursive pull of a permission-restricted directory using
+        'sudo find' + 'sudo cat' for each file (works when SFTP/adb-pull is
+        denied by filesystem permissions but sudo access is available).
+        Returns True if at least one file was retrieved.
+        """
+        rc, listing = self.shell_sudo(f"find {remote_dir} -type f 2>/dev/null")
+        if rc != 0 or not listing.strip():
+            return False
+        ok = False
+        for remote_path in listing.splitlines():
+            remote_path = remote_path.strip()
+            if not remote_path:
+                continue
+            rel = os.path.relpath(remote_path, remote_dir)
+            local_path = os.path.join(local_dir, rel)
+            try:
+                os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
+            except OSError:
+                continue
+            rc2, content = self.shell_sudo(f"cat {remote_path}")
+            if rc2 == 0 and content:
+                with open(local_path, "w", encoding="utf-8", errors="replace") as f:
+                    f.write(content)
+                ok = True
+        return ok
+
     def close(self):
         """Release any resources held by the transport."""
         pass
@@ -90,23 +151,38 @@ class Transport:
 class AdbTransport(Transport):
     """Transport using Android Debug Bridge (adb)."""
 
-    def __init__(self, serial: str | None = None):
+    def __init__(self, serial: str | None = None, sudo_password: str | None = None):
+        super().__init__()
         self._serial = serial
+        self.sudo_password = sudo_password
 
     @property
     def device_id(self) -> str:
         return self._serial or "auto"
 
-    def _adb(self, *args) -> tuple[int, str]:
+    def _adb(self, *args, input_text: str | None = None) -> tuple[int, str]:
         cmd = ["adb"]
         if self._serial:
             cmd += ["-s", self._serial]
         cmd += list(args)
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, input=input_text)
         return result.returncode, result.stdout
 
     def shell(self, cmd: str) -> tuple[int, str]:
         return self._adb("shell", cmd)
+
+    def shell_sudo(self, cmd: str) -> tuple[int, str]:
+        """
+        Try 'su -c' first (common on Android/embedded Qualcomm builds where
+        adb shell is unprivileged but su is available), then fall back to
+        sudo. If self.sudo_password is set, it is piped to stdin for sudo -S.
+        """
+        quoted = shlex.quote(cmd)
+        if self.sudo_password:
+            full_cmd = f"su -c {quoted} 2>/dev/null || sudo -S -p '' {cmd} 2>/dev/null"
+            return self._adb("shell", full_cmd, input_text=self.sudo_password + "\n")
+        full_cmd = f"su -c {quoted} 2>/dev/null || sudo -n {cmd} 2>/dev/null"
+        return self._adb("shell", full_cmd)
 
     def pull(self, remote: str, local: str) -> bool:
         os.makedirs(os.path.dirname(os.path.abspath(local)), exist_ok=True)
@@ -127,7 +203,9 @@ class SshTransport(Transport):
     """
 
     def __init__(self, host: str, user: str = "root", port: int = 22,
-                 key_file: str | None = None, password: str | None = None):
+                 key_file: str | None = None, password: str | None = None,
+                 sudo_password: str | None = None):
+        super().__init__()
         try:
             import paramiko
         except ImportError:
@@ -137,6 +215,7 @@ class SshTransport(Transport):
 
         self._host = host
         self._user = user
+        self.sudo_password = sudo_password
         self._client = paramiko.SSHClient()
         self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -163,8 +242,27 @@ class SshTransport(Transport):
             output = stdout.read().decode("utf-8", errors="replace")
             rc = stdout.channel.recv_exit_status()
             return rc, output
-        except Exception as e:
+        except Exception:
             return 1, ""
+
+    def shell_sudo(self, cmd: str) -> tuple[int, str]:
+        """
+        Run cmd under sudo. If self.sudo_password is set, the password is
+        written to the command's stdin (never passed as a CLI argument, so it
+        is not exposed via 'ps'). Otherwise attempts passwordless 'sudo -n'.
+        """
+        if self.sudo_password:
+            try:
+                full_cmd = f"sudo -S -p '' {cmd}"
+                stdin, stdout, stderr = self._client.exec_command(full_cmd, timeout=30)
+                stdin.write(self.sudo_password + "\n")
+                stdin.flush()
+                output = stdout.read().decode("utf-8", errors="replace")
+                rc = stdout.channel.recv_exit_status()
+                return rc, output
+            except Exception:
+                return 1, ""
+        return self.shell(f"sudo -n {cmd}")
 
     def pull(self, remote: str, local: str) -> bool:
         try:
@@ -235,7 +333,7 @@ def select_transport_interactive(args) -> Transport:
          - 0 devices → offer SSH
          - 1 device  → use automatically
          - 2+ devices → ask user to select one (or choose SSH)
-      2. If SSH selected → prompt for hostname, username, password
+      2. If SSH selected → prompt for hostname, username, password, sudo password
     """
     devices = list_adb_devices()
 
@@ -243,7 +341,8 @@ def select_transport_interactive(args) -> Transport:
     if len(devices) == 1:
         serial, status = devices[0]
         print(f"[data-collection] Found 1 ADB device: {serial} ({status})")
-        return AdbTransport(serial=serial)
+        sudo_password = getattr(args, "sudo_password", None)
+        return AdbTransport(serial=serial, sudo_password=sudo_password)
 
     # Multiple devices: ask user to select
     if len(devices) > 1:
@@ -258,7 +357,8 @@ def select_transport_interactive(args) -> Transport:
                 if 1 <= idx <= len(devices):
                     serial = devices[idx - 1][0]
                     print(f"[data-collection] Using ADB device: {serial}")
-                    return AdbTransport(serial=serial)
+                    sudo_password = getattr(args, "sudo_password", None)
+                    return AdbTransport(serial=serial, sudo_password=sudo_password)
                 elif idx == len(devices) + 1:
                     break  # fall through to SSH
             except ValueError:
@@ -266,7 +366,8 @@ def select_transport_interactive(args) -> Transport:
                 for serial, status in devices:
                     if choice == serial:
                         print(f"[data-collection] Using ADB device: {serial}")
-                        return AdbTransport(serial=serial)
+                        sudo_password = getattr(args, "sudo_password", None)
+                        return AdbTransport(serial=serial, sudo_password=sudo_password)
             print(f"  Invalid selection. Enter a number (1-{len(devices) + 1}) or a serial number.")
 
     # No ADB devices available
@@ -285,10 +386,16 @@ def select_transport_interactive(args) -> Transport:
         sys.exit(1)
     user = input("  Username [root]: ").strip() or "root"
     password = getpass.getpass("  Password: ")
+    sudo_password = getpass.getpass(
+        "  Sudo password (press Enter to reuse login password, if needed): "
+    )
+    if not sudo_password:
+        sudo_password = password
     port = getattr(args, "port", 22) or 22
     key_file = getattr(args, "key", None)
     return SshTransport(host=host, user=user, port=port,
-                        key_file=key_file, password=password)
+                        key_file=key_file, password=password,
+                        sudo_password=sudo_password)
 
 
 def make_transport(args) -> Transport:
@@ -297,7 +404,15 @@ def make_transport(args) -> Transport:
       --host   → SshTransport (prompts for password if no --key provided)
       --serial → AdbTransport(serial)
       neither  → interactive selection (auto-detect ADB or prompt for SSH)
+
+    Sudo password resolution:
+      1. --sudo-password if explicitly provided.
+      2. Otherwise, for SSH transport, reuse the SSH login password as the
+         sudo password (common case: same credentials for login and sudo),
+         unless --no-sudo-reuse is set.
     """
+    sudo_password = getattr(args, "sudo_password", None)
+
     if hasattr(args, "host") and args.host:
         key_file = getattr(args, "key", None)
         password = getattr(args, "password", None)
@@ -305,15 +420,18 @@ def make_transport(args) -> Transport:
             password = getpass.getpass(
                 f"  SSH password for {getattr(args, 'user', 'root') or 'root'}@{args.host}: "
             )
+        if not sudo_password and not getattr(args, "no_sudo_reuse", False):
+            sudo_password = password
         return SshTransport(
             host=args.host,
             user=getattr(args, "user", "root") or "root",
             port=getattr(args, "port", 22) or 22,
             key_file=key_file,
             password=password,
+            sudo_password=sudo_password,
         )
     if hasattr(args, "serial") and args.serial:
-        return AdbTransport(serial=args.serial)
+        return AdbTransport(serial=args.serial, sudo_password=sudo_password)
     # Neither --host nor --serial: interactive selection
     return select_transport_interactive(args)
 
@@ -995,27 +1113,35 @@ PROC_SOURCES = [
 ]
 
 DEBUGFS_SOURCES = [
-    ("dmabuf",           "/sys/kernel/debug/dma_buf/bufinfo",       "dmabuf_bufinfo.txt"),
-    ("kgsl",             "/sys/class/kgsl/kgsl/page_alloc",         "kgsl_alloc.txt"),
+    ("dmabuf",           "/sys/kernel/debug/dma_buf/bufinfo",        "dmabuf_bufinfo.txt"),
+    ("kgsl",             "/sys/class/kgsl/kgsl/page_alloc",          "kgsl_alloc.txt"),
     ("memblock",         "/sys/kernel/debug/memblock/memory",        "memblock.txt"),
     ("memblock_reserved","/sys/kernel/debug/memblock/reserved",      "memblock_reserved.txt"),
-    ("kgsl_gpu",         "/sys/kernel/debug/kgsl/kgsl-3d0/mem",     "kgsl_gpu_mem.txt"),
+    ("kgsl_gpu",         "/sys/kernel/debug/kgsl/kgsl-3d0/mem",      "kgsl_gpu_mem.txt"),
 ]
 
 
 def pull_with_sudo_fallback(transport: Transport, remote: str, local: str) -> bool:
     """
-    Pull a file from the device, falling back to 'sudo cat' if direct pull fails.
-    This handles /proc files that require elevated permissions (e.g. slabinfo, pagetypeinfo).
-    Uses 'sudo -n' (non-interactive) to avoid password prompts.
+    Pull a file from the device, falling back to a privileged read if a
+    direct (unprivileged) pull fails. This handles /proc and debugfs files
+    that require elevated permissions (e.g. slabinfo, pagetypeinfo, memblock).
+
+    Escalation order:
+      1. Direct transport.pull() (SFTP get / adb pull) -- works if the file
+         is world-readable or the connected user already has access.
+      2. transport.shell_sudo('cat <remote>') -- uses 'sudo -S' with the
+         configured sudo password (transport.sudo_password) if set, else
+         falls back to non-interactive 'sudo -n' (requires a NOPASSWD rule).
+
     Returns True if the file was successfully retrieved by any method.
     """
-    # Try normal pull first (works for most files)
+    # Try normal (unprivileged) pull first -- fastest path for most files.
     if transport.pull(remote, local):
         return True
 
-    # Fallback: try sudo cat (for permission-restricted files)
-    rc, output = transport.shell(f"sudo -n cat {remote} 2>/dev/null")
+    # Fallback: read via sudo (password-authenticated if configured, else -n)
+    rc, output = transport.shell_sudo(f"cat {remote}")
     if rc == 0 and output.strip():
         os.makedirs(os.path.dirname(os.path.abspath(local)), exist_ok=True)
         with open(local, "w", encoding="utf-8", errors="replace") as f:
@@ -1030,7 +1156,9 @@ def collect_from_device(transport: Transport, output_dir: str) -> list:
     Pull all memory files from device using the given transport.
     Returns list of collection errors.
     Output files are identical regardless of whether ADB or SSH is used.
-    For files that fail due to permissions, a sudo fallback is attempted automatically.
+    For files that fail due to permissions, a sudo fallback is attempted
+    automatically (password-authenticated via transport.sudo_password, or
+    non-interactive 'sudo -n' if no password was configured).
     """
     errors = []
     os.makedirs(output_dir, exist_ok=True)
@@ -1047,32 +1175,37 @@ def collect_from_device(transport: Transport, output_dir: str) -> list:
         if not pull_with_sudo_fallback(transport, remote, local):
             errors.append({"source": key, "error": f"pull failed: {remote}"})
 
-    # CMA used (glob)
-    rc, cma_list = transport.shell("ls /sys/kernel/debug/cma/")
-    if rc == 0:
+    # CMA used (glob) -- list dir with sudo fallback, then pull each region
+    rc, cma_list = transport.shell("ls /sys/kernel/debug/cma/ 2>/dev/null")
+    if rc != 0 or not cma_list.strip():
+        rc, cma_list = transport.shell_sudo("ls /sys/kernel/debug/cma/")
+    if rc == 0 and cma_list.strip():
         cma_dir = os.path.join(output_dir, "cma")
         os.makedirs(cma_dir, exist_ok=True)
         for region in cma_list.split():
             remote = f"/sys/kernel/debug/cma/{region}/used"
             local = os.path.join(cma_dir, f"{region}_used.txt")
-            transport.pull(remote, local)
+            pull_with_sudo_fallback(transport, remote, local)
     else:
         errors.append({"source": "cma", "error": "cma debugfs not available"})
 
-    # KGSL per-process (directory pull)
+    # KGSL per-process (directory pull, with sudo fallback)
     kgsl_proc_dir = os.path.join(output_dir, "kgsl_procs")
     if not transport.pull_dir("/sys/class/kgsl/kgsl/proc", kgsl_proc_dir):
-        errors.append({"source": "kgsl_procs", "error": "kgsl proc dir not available"})
+        if not transport.pull_dir_sudo("/sys/class/kgsl/kgsl/proc", kgsl_proc_dir):
+            errors.append({"source": "kgsl_procs", "error": "kgsl proc dir not available"})
 
-    # procrank (Android/Qualcomm Linux)
+    # procrank (Android/Qualcomm Linux) -- try unprivileged, then sudo
     _, procrank_out = transport.shell("procrank -p 2>/dev/null || echo ''")
+    if not procrank_out.strip():
+        _, procrank_out = transport.shell_sudo("procrank -p")
     if procrank_out.strip():
         with open(os.path.join(output_dir, "procrank.txt"), "w") as f:
             f.write(procrank_out)
     else:
         # Fallback: collect PSS from /proc/*/smaps_rollup (standard Linux / Debian)
         # Format per line: <pid> <pss_kb> <name>
-        _, fallback_out = transport.shell(
+        fallback_script = (
             "for pid in $(ls /proc/ | grep -E '^[0-9]+$'); do "
             "  pss=$(grep ^Pss: /proc/$pid/smaps_rollup 2>/dev/null | awk '{print $2}'); "
             "  rss=$(grep ^VmRSS: /proc/$pid/status 2>/dev/null | awk '{print $2}'); "
@@ -1082,21 +1215,26 @@ def collect_from_device(transport: Transport, output_dir: str) -> list:
             "  echo \"$pid $pss ${rss:-0} ${cmdline:-$name}\"; "
             "done 2>/dev/null | sort -k2 -rn"
         )
+        _, fallback_out = transport.shell(fallback_script)
+        if not fallback_out.strip():
+            _, fallback_out = transport.shell_sudo(fallback_script)
         if fallback_out.strip():
             with open(os.path.join(output_dir, "proc_stats_fallback.txt"), "w") as f:
                 f.write(fallback_out)
         else:
             errors.append({"source": "process_stats", "error": "procrank not available and smaps_rollup fallback failed"})
 
-    # zram stats
+    # zram stats -- try unprivileged, then sudo
     _, zram_out = transport.shell("cat /sys/block/zram0/mm_stat 2>/dev/null")
+    if not zram_out.strip():
+        _, zram_out = transport.shell_sudo("cat /sys/block/zram0/mm_stat")
     if zram_out.strip():
         with open(os.path.join(output_dir, "zramstat.txt"), "w") as f:
             f.write(zram_out)
     else:
         errors.append({"source": "zram", "error": "zram not available"})
 
-    # smaps for top PSS processes (top 5 by PSS from procrank)
+    # smaps for top PSS processes (top 5 by PSS from procrank), sudo fallback per-pid
     smaps_dir = os.path.join(output_dir, "smaps")
     os.makedirs(smaps_dir, exist_ok=True)
     procrank_path = os.path.join(output_dir, "procrank.txt")
@@ -1106,6 +1244,8 @@ def collect_from_device(transport: Transport, output_dir: str) -> list:
         for proc in top_procs:
             pid = proc["pid"]
             _, smaps_out = transport.shell(f"cat /proc/{pid}/smaps 2>/dev/null")
+            if not smaps_out.strip():
+                _, smaps_out = transport.shell_sudo(f"cat /proc/{pid}/smaps")
             if smaps_out.strip():
                 safe_name = proc["name"].split("/")[-1].split()[0][:20]
                 fname = os.path.join(smaps_dir, f"{pid}_{safe_name}_smaps.txt")
@@ -1117,14 +1257,23 @@ def collect_from_device(transport: Transport, output_dir: str) -> list:
     # dmesg (for kernel static breakdown)
     # Try journalctl -k first -- it preserves the full boot log including early
     # messages (Memory line, hash tables) that may be overwritten in dmesg ring buffer.
-    # Fall back to dmesg if journalctl is not available.
+    # Fall back to dmesg if journalctl is not available. Both attempted with
+    # sudo if the unprivileged read is empty/denied.
     rc_jctl, jctl_out = transport.shell("journalctl -k --no-pager 2>/dev/null")
+    if rc_jctl != 0 or not jctl_out.strip() or "kernel code" not in jctl_out:
+        rc_jctl2, jctl_out2 = transport.shell_sudo("journalctl -k --no-pager")
+        if rc_jctl2 == 0 and jctl_out2.strip() and "kernel code" in jctl_out2:
+            jctl_out = jctl_out2
+            rc_jctl = rc_jctl2
+
     if rc_jctl == 0 and jctl_out.strip() and "kernel code" in jctl_out:
         with open(os.path.join(output_dir, "dmesg.txt"), "w", encoding="utf-8",
                   errors="replace") as f:
             f.write(jctl_out)
     else:
         _, dmesg_out = transport.shell("dmesg 2>/dev/null")
+        if not dmesg_out.strip():
+            _, dmesg_out = transport.shell_sudo("dmesg")
         if dmesg_out.strip():
             with open(os.path.join(output_dir, "dmesg.txt"), "w", encoding="utf-8",
                       errors="replace") as f:
@@ -1138,11 +1287,15 @@ def collect_from_device(transport: Transport, output_dir: str) -> list:
     rc4, dt_nodes = transport.shell(
         "ls /sys/firmware/devicetree/base/reserved-memory/ 2>/dev/null"
     )
-    if rc4 == 0:
+    if rc4 != 0 or not dt_nodes.strip():
+        rc4, dt_nodes = transport.shell_sudo(
+            "ls /sys/firmware/devicetree/base/reserved-memory/"
+        )
+    if rc4 == 0 and dt_nodes.strip():
         for node in dt_nodes.split():
             remote = f"/sys/firmware/devicetree/base/reserved-memory/{node}/reg"
             local = os.path.join(reserved_dir, f"{node}.bin")
-            transport.pull(remote, local)
+            pull_with_sudo_fallback(transport, remote, local)
     else:
         errors.append({"source": "reserved_memory", "error": "DT reserved-memory not accessible"})
 
@@ -1389,6 +1542,17 @@ def main():
     conn.add_argument("--password", metavar="PASSWORD",
                       help="SSH password (if not provided, prompted interactively)")
 
+    sudo = parser.add_argument_group("Privilege escalation (for restricted /proc and debugfs sources)")
+    sudo.add_argument("--sudo-password", metavar="PASSWORD", default=None,
+                      help=(
+                          "Password to use for 'sudo -S' when reading permission-restricted "
+                          "sources (e.g. /proc/slabinfo, debugfs entries) as a non-root user. "
+                          "If omitted for SSH transport, the --password value is reused "
+                          "automatically unless --no-sudo-reuse is given."
+                      ))
+    sudo.add_argument("--no-sudo-reuse", action="store_true",
+                      help="Do not reuse the SSH login password as the sudo password.")
+
     parser.add_argument("-o", "--output", default="mem_dump",
                         help="Output directory (default: mem_dump)")
     parser.add_argument("--label", default="snapshot",
@@ -1405,6 +1569,8 @@ def main():
         transport = make_transport(args)
         transport_type = "SSH" if isinstance(transport, SshTransport) else "ADB"
         print(f"[data-collection] Collecting from device ({transport_type}: {transport.device_id})...")
+        if transport.sudo_password:
+            print("[data-collection] Sudo password configured -- elevated sources will use 'sudo -S' as needed.")
         device_info = get_device_info(transport)
         errs = collect_from_device(transport, output_dir)
         transport.close()
