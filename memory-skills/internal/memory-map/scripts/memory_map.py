@@ -689,14 +689,25 @@ def parse_procrank(path: Path) -> dict[str, tuple[int, int]]:
             if not line or "PID" in line or "------" in line:
                 continue
             parts = line.split()
-            if len(parts) < 5:
+            # Process rows start with a numeric PID; this skips the TOTAL,
+            # ZRAM and RAM summary lines.
+            if len(parts) < 6 or not parts[0].isdigit():
+                continue
+            # Columns: PID Vss Rss Pss Uss [Swap PSwap USwap [ZSwap]] cmdline
+            # All size fields end with 'K'; the cmdline is the rest.
+            sizes = []
+            for p in parts[1:]:
+                if not p.endswith("K"):
+                    break
+                sizes.append(p)
+            cmdline = " ".join(parts[1 + len(sizes):])
+            if len(sizes) < 4 or not cmdline:
                 continue
             try:
-                pss_kb   = int(parts[3].rstrip("K"))
-                pswap_kb = int(parts[4].rstrip("K")) if len(parts) > 4 else 0
-                cmdline  = parts[-1]
+                pss_kb   = int(sizes[2].rstrip("K"))
+                pswap_kb = int(sizes[5].rstrip("K")) if len(sizes) >= 7 else 0
                 result[cmdline] = (pss_kb, pswap_kb)
-            except (ValueError, IndexError):
+            except ValueError:
                 pass
     except Exception:
         pass
